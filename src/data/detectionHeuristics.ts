@@ -2,11 +2,9 @@ import type { DetectionCategory } from '@/types/project'
 
 export type DetectionFilters = Record<DetectionCategory, boolean>
 
-// Filters default to showing everything except raw buttons and nav — those
-// tend to be noisy on first pass.
 export const DEFAULT_FILTERS: DetectionFilters = {
-  button: false,
-  nav: false,
+  button: true,
+  nav: true,
   field: true,
   table: true,
   badge: true,

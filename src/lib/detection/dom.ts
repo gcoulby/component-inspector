@@ -18,7 +18,16 @@ function dataComponentOf(node: Element): string | undefined {
   return node instanceof HTMLElement ? node.dataset.component : undefined
 }
 
+// Hidden elements (display:none, or genuinely zero-sized) can't be boxed —
+// their rect is degenerate, and letting one win a signature's detection slot
+// silently steals it from a visible sibling.
+function isVisible(node: Element): boolean {
+  const r = node.getBoundingClientRect()
+  return r.width > 0 && r.height > 0
+}
+
 export function isInteresting(node: Element): boolean {
+  if (!isVisible(node)) return false
   if (INTERESTING_TAGS.includes(node.tagName)) return true
   if (node.getAttribute('role')) return true
   if (dataComponentOf(node)) return true

@@ -38,6 +38,7 @@ export function MockupCanvas({
   onLoadMockupClick,
 }: MockupCanvasProps) {
   const [inspectMode, setInspectMode] = useState(false)
+  const [showBoxes, setShowBoxes] = useState(true)
   const [hover, setHover] = useState<HoverState | null>(null)
   const [frameHeight, setFrameHeight] = useState(MIN_FRAME_HEIGHT)
   const [detectMessage, setDetectMessage] = useState<string | null>(null)
@@ -129,6 +130,9 @@ export function MockupCanvas({
         <Button variant="outline" size="sm" onClick={handleAutoDetect}>
           Auto-detect
         </Button>
+        <Button variant={showBoxes ? 'default' : 'outline'} size="sm" onClick={() => setShowBoxes((v) => !v)}>
+          Boxes: {showBoxes ? 'on' : 'off'}
+        </Button>
         {inspectMode && !detectMessage && (
           <span className="text-xs text-muted-foreground">Hover to highlight, click to box</span>
         )}
@@ -145,28 +149,29 @@ export function MockupCanvas({
             className="block w-full border-0 bg-white"
           />
           <div className="pointer-events-none absolute inset-0">
-            {view.blocks.map((block) => {
-              const component = components.find((c) => c.id === block.componentId)
-              const style = CATEGORY_STYLES[component?.category ?? 'unmatched']
-              return (
-                <div
-                  key={block.id}
-                  onClick={() => onSelectComponent(block.componentId)}
-                  className={cn(
-                    'pointer-events-auto absolute cursor-pointer rounded-sm border',
-                    style.border,
-                    style.bg,
-                    block.componentId === selectedComponentId && 'ring-2 ring-white',
-                  )}
-                  style={{
-                    left: `${block.rectPct.left}%`,
-                    top: `${block.rectPct.top}%`,
-                    width: `${block.rectPct.width}%`,
-                    height: `${block.rectPct.height}%`,
-                  }}
-                />
-              )
-            })}
+            {showBoxes &&
+              view.blocks.map((block) => {
+                const component = components.find((c) => c.id === block.componentId)
+                const style = CATEGORY_STYLES[component?.category ?? 'unmatched']
+                return (
+                  <div
+                    key={block.id}
+                    onClick={() => onSelectComponent(block.componentId)}
+                    className={cn(
+                      'pointer-events-auto absolute cursor-pointer rounded-sm border-2',
+                      style.border,
+                      style.bg,
+                      block.componentId === selectedComponentId && 'ring-2 ring-white',
+                    )}
+                    style={{
+                      left: `${block.rectPct.left}%`,
+                      top: `${block.rectPct.top}%`,
+                      width: `${block.rectPct.width}%`,
+                      height: `${block.rectPct.height}%`,
+                    }}
+                  />
+                )
+              })}
             {hover && (
               <div
                 className="pointer-events-none absolute rounded-sm border-2 border-dashed border-white bg-white/10"

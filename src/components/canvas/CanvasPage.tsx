@@ -47,6 +47,22 @@ export function CanvasPage() {
     setSelectedComponentId(null)
   }, [activeViewId])
 
+  const thumbnails = useMemo(() => {
+    const urls = new Map<string, string>()
+    for (const view of views) {
+      if (!view.screenshotAssetId) continue
+      const blob = assets.get(`assets/${view.screenshotAssetId}.png`)
+      if (blob) urls.set(view.id, URL.createObjectURL(blob))
+    }
+    return urls
+  }, [views, assets])
+
+  useEffect(() => {
+    return () => {
+      thumbnails.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [thumbnails])
+
   useEffect(() => {
     if (!activeView) {
       setMockupHtml(null)
@@ -111,6 +127,7 @@ export function CanvasPage() {
       <ViewsSidebar
         views={views}
         activeViewId={activeViewId}
+        thumbnails={thumbnails}
         onSelect={setActiveViewId}
         onDelete={deleteView}
         onAdd={() => setModalOpen(true)}

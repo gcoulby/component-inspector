@@ -5,6 +5,7 @@ import { fingerprintOf } from '@/lib/detection/fingerprint'
 import { MIN_FRAME_HEIGHT, resizeIframeToContent } from '@/lib/iframeResize'
 import { captureScreenshot } from '@/lib/screenshot'
 import { debounce } from '@/lib/debounce'
+import { useLiveSessionStore } from '@/store/liveSessionStore'
 import type { DetectionFilters } from '@/data/detectionHeuristics'
 
 const FRAME_WIDTH = 1280
@@ -23,10 +24,13 @@ export function InteractiveWorkspace({
   onAutoDetectView,
   onFlowLine,
 }: InteractiveWorkspaceProps) {
-  const [rootHtml, setRootHtml] = useState<string | null>(null)
+  const rootHtml = useLiveSessionStore((s) => s.rootHtml)
+  const setRootHtml = useLiveSessionStore((s) => s.setRootHtml)
+  const recording = useLiveSessionStore((s) => s.recording)
+  const setRecording = useLiveSessionStore((s) => s.setRecording)
+
   const [pasting, setPasting] = useState(false)
   const [pasteText, setPasteText] = useState('')
-  const [recording, setRecording] = useState(false)
   const [frameHeight, setFrameHeight] = useState(MIN_FRAME_HEIGHT)
   const [status, setStatus] = useState<string | null>(null)
 
@@ -186,6 +190,16 @@ export function InteractiveWorkspace({
         </Button>
         <Button variant="outline" size="sm" onClick={() => void commitCurrentScreen(true)}>
           💾 Save view
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setRecording(false)
+            setRootHtml(null)
+          }}
+        >
+          Change mockup
         </Button>
         {status && <span className="text-xs text-muted-foreground">{status}</span>}
       </div>
