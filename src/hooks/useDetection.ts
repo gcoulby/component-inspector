@@ -3,6 +3,14 @@ import { useProjectStore } from '@/store/projectStore'
 import type { Block, ComponentCategory, Project, ProjectComponent } from '@/types/project'
 import { autoLabel, rectPctOfLive, signatureOf } from '@/lib/detection/dom'
 import { matchManifest } from '@/lib/detection/manifestMatch'
+import {
+  removeBlockFromView,
+  renameComponent,
+  setComponentCategory,
+  setComponentMatch,
+  setComponentNotes,
+  setComponentRefUrl,
+} from '@/lib/detection/componentRegistry'
 
 function getOrCreateComponent(
   components: ProjectComponent[],
@@ -109,5 +117,46 @@ export function useDetection() {
     [updateProject],
   )
 
-  return { addOrSelectBlockAt, autoDetectAt }
+  const renameComponentAt = useCallback(
+    (componentId: string, label: string) => updateProject((project) => renameComponent(project, componentId, label)),
+    [updateProject],
+  )
+
+  const setComponentCategoryAt = useCallback(
+    (componentId: string, category: ComponentCategory) =>
+      updateProject((project) => setComponentCategory(project, componentId, category)),
+    [updateProject],
+  )
+
+  const setComponentMatchAt = useCallback(
+    (componentId: string, matchedName: string | null) =>
+      updateProject((project) => setComponentMatch(project, componentId, matchedName)),
+    [updateProject],
+  )
+
+  const setComponentNotesAt = useCallback(
+    (componentId: string, notes: string) => updateProject((project) => setComponentNotes(project, componentId, notes)),
+    [updateProject],
+  )
+
+  const setComponentRefUrlAt = useCallback(
+    (componentId: string, refUrl: string) => updateProject((project) => setComponentRefUrl(project, componentId, refUrl)),
+    [updateProject],
+  )
+
+  const removeBlockFromViewAt = useCallback(
+    (viewId: string, componentId: string) => updateProject((project) => removeBlockFromView(project, viewId, componentId)),
+    [updateProject],
+  )
+
+  return {
+    addOrSelectBlockAt,
+    autoDetectAt,
+    renameComponentAt,
+    setComponentCategoryAt,
+    setComponentMatchAt,
+    setComponentNotesAt,
+    setComponentRefUrlAt,
+    removeBlockFromViewAt,
+  }
 }

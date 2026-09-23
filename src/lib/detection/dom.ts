@@ -87,6 +87,37 @@ export function elementsForSignature(doc: Document, signature: string): Element[
   return out
 }
 
+// One element per distinct signature — the shared dedupe used by every bulk
+// scan (manual auto-detect and the interactive workspace's settle capture).
+export function collectDetectableElements(doc: Document, filters: DetectionFilters): Element[] {
+  const seen = new Map<string, Element>()
+  doc.querySelectorAll('*').forEach((el) => {
+    if (!isInteresting(el) || !passesFilter(el, filters)) return
+    const signature = signatureOf(el)
+    if (!seen.has(signature)) seen.set(signature, el)
+  })
+  return Array.from(seen.values())
+}
+
+// Walks up from a click target to find what should label a flow transition:
+// a data-action ancestor first, then the nearest button-like element's text.
+export function traceLabelFor(el: Element): string {
+  let node: Element | null = el
+  for (let depth = 0; node && depth < 5; depth++, node = node.parentElement) {
+    const action = node instanceof HTMLElement ? node.dataset.action : undefined
+    if (action) return titleCase(action)
+  }
+  node = el
+  for (let depth = 0; node && depth < 5; depth++, node = node.parentElement) {
+    const isButtonLike = ['BUTTON', 'A'].includes(node.tagName) || node.getAttribute('role') === 'button'
+    if (isButtonLike) {
+      const text = (node.textContent ?? '').trim().replace(/\s+/g, ' ')
+      if (text) return text.slice(0, 40)
+    }
+  }
+  return 'Click'
+}
+
 export function rectPctOfLive(node: Element, frame: DOMRect): Block['rectPct'] {
   const r = node.getBoundingClientRect()
   return {

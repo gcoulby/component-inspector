@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import type { View } from '@/types/project'
+import { cn } from '@/lib/utils'
+import type { ProjectComponent, View } from '@/types/project'
 import type { DetectionFilters } from '@/data/detectionHeuristics'
-import { autoLabel, findInteresting, isInteresting, passesFilter, signatureOf } from '@/lib/detection/dom'
+import { CATEGORY_STYLES } from '@/data/categoryPresentation'
+import { autoLabel, collectDetectableElements, findInteresting } from '@/lib/detection/dom'
+import { MIN_FRAME_HEIGHT, resizeIframeToContent } from '@/lib/iframeResize'
 
 const FRAME_WIDTH = 1280
-const MIN_FRAME_HEIGHT = 500
-const MAX_FRAME_HEIGHT = 6000
 
 interface HoverState {
   rect: DOMRect
@@ -17,8 +18,11 @@ interface MockupCanvasProps {
   view: View | null
   mockupHtml: string | null
   filters: DetectionFilters
+  components: ProjectComponent[]
+  selectedComponentId: string | null
   onAddBlock: (node: Element, frame: DOMRect) => void
   onAutoDetect: (elements: Element[], frame: DOMRect) => number
+  onSelectComponent: (componentId: string) => void
   onLoadMockupClick: () => void
 }
 
@@ -26,8 +30,11 @@ export function MockupCanvas({
   view,
   mockupHtml,
   filters,
+  components,
+  selectedComponentId,
   onAddBlock,
   onAutoDetect,
+  onSelectComponent,
   onLoadMockupClick,
 }: MockupCanvasProps) {
   const [inspectMode, setInspectMode] = useState(false)
@@ -56,14 +63,7 @@ export function MockupCanvas({
   }, [detectMessage])
 
   const resizeFrame = useCallback((iframe: HTMLIFrameElement, idoc: Document) => {
-    // Reset to a fixed baseline before measuring, never to 0px — a shell built
-    // on min-height:100vh needs a real viewport to measure against, and never
-    // inherit the previous view's height or a vh-based layout won't shrink.
-    iframe.style.height = '1000px'
-    void iframe.offsetHeight
-    const h = Math.min(Math.max(idoc.documentElement.scrollHeight, MIN_FRAME_HEIGHT), MAX_FRAME_HEIGHT)
-    iframe.style.height = `${h}px`
-    setFrameHeight(h)
+    setFrameHeight(resizeIframeToContent(iframe, idoc))
   }, [])
 
   const handleFrameLoad = useCallback(() => {
@@ -101,14 +101,7 @@ export function MockupCanvas({
     resizeFrame(iframe, idoc)
     const frame = iframe.getBoundingClientRect()
 
-    const seen = new Map<string, Element>()
-    idoc.querySelectorAll('*').forEach((el) => {
-      if (!isInteresting(el) || !passesFilter(el, filters)) return
-      const signature = signatureOf(el)
-      if (!seen.has(signature)) seen.set(signature, el)
-    })
-
-    const added = onAutoDetect(Array.from(seen.values()), frame)
+    const added = onAutoDetect(collectDetectableElements(idoc, filters), frame)
     setDetectMessage(added > 0 ? `Added ${added} detected block${added === 1 ? '' : 's'}` : 'Nothing new found — try Inspect mode for anything unusual')
   }, [filters, onAutoDetect, resizeFrame])
 
@@ -152,21 +145,31 @@ export function MockupCanvas({
             className="block w-full border-0 bg-white"
           />
           <div className="pointer-events-none absolute inset-0">
-            {view.blocks.map((block) => (
-              <div
-                key={block.id}
-                className="absolute rounded-sm border border-primary/70 bg-primary/10"
-                style={{
-                  left: `${block.rectPct.left}%`,
-                  top: `${block.rectPct.top}%`,
-                  width: `${block.rectPct.width}%`,
-                  height: `${block.rectPct.height}%`,
-                }}
-              />
-            ))}
+            {view.blocks.map((block) => {
+              const component = components.find((c) => c.id === block.componentId)
+              const style = CATEGORY_STYLES[component?.category ?? 'unmatched']
+              return (
+                <div
+                  key={block.id}
+                  onClick={() => onSelectComponent(block.componentId)}
+                  className={cn(
+                    'pointer-events-auto absolute cursor-pointer rounded-sm border',
+                    style.border,
+                    style.bg,
+                    block.componentId === selectedComponentId && 'ring-2 ring-white',
+                  )}
+                  style={{
+                    left: `${block.rectPct.left}%`,
+                    top: `${block.rectPct.top}%`,
+                    width: `${block.rectPct.width}%`,
+                    height: `${block.rectPct.height}%`,
+                  }}
+                />
+              )
+            })}
             {hover && (
               <div
-                className="absolute rounded-sm border-2 border-dashed border-white bg-white/10"
+                className="pointer-events-none absolute rounded-sm border-2 border-dashed border-white bg-white/10"
                 style={{
                   left: hover.rect.left,
                   top: hover.rect.top,

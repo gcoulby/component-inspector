@@ -4,6 +4,7 @@ import { createEmptyProject, type View } from '@/types/project'
 import { buildFdrArchive, parseFdrArchive } from '@/lib/fdr/serialize'
 import { openFdrFile, saveFdrBlob } from '@/lib/fdr/fileSystemAccess'
 import { deriveViewName } from '@/lib/detection/viewNaming'
+import { appendFlowLine } from '@/lib/flow/flowText'
 import {
   clearAutosaveSnapshot,
   readAutosaveSnapshot,
@@ -111,6 +112,42 @@ export function useProject() {
     [updateProject],
   )
 
+  // Commits a freshly-settled live screen as its own view, blocks starting
+  // empty — the caller runs auto-detect against the new view id right after.
+  const commitView = useCallback(
+    (html: string, screenshotBlob: Blob | null): { viewId: string; name: string } => {
+      const htmlAssetId = crypto.randomUUID()
+      setAsset(`assets/${htmlAssetId}.html`, new Blob([html], { type: 'text/html' }))
+
+      let screenshotAssetId: string | null = null
+      if (screenshotBlob) {
+        screenshotAssetId = crypto.randomUUID()
+        setAsset(`assets/${screenshotAssetId}.png`, screenshotBlob)
+      }
+
+      let result = { viewId: '', name: '' }
+      updateProject((p) => {
+        const name = deriveViewName(
+          html,
+          p.views.map((v) => v.name),
+          p.views.length + 1,
+        )
+        const view: View = { id: crypto.randomUUID(), name, htmlAssetId, screenshotAssetId, blocks: [] }
+        result = { viewId: view.id, name }
+        return { ...p, views: [...p.views, view] }
+      })
+      return result
+    },
+    [setAsset, updateProject],
+  )
+
+  const addFlowLine = useCallback(
+    (from: string, to: string, label: string) => {
+      updateProject((p) => ({ ...p, flowText: appendFlowLine(p.flowText, from, to, label) }))
+    },
+    [updateProject],
+  )
+
   const recoverSnapshot = useCallback(() => {
     if (!recoverableSnapshot) return
     loadProject(recoverableSnapshot.project, recoverableSnapshot.assets, {
@@ -138,6 +175,8 @@ export function useProject() {
     setAsset,
     addView,
     deleteView,
+    commitView,
+    addFlowLine,
     recoverSnapshot,
     discardSnapshot,
   }
