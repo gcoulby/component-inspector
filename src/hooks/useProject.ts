@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useProjectStore } from '@/store/projectStore'
-import { createEmptyProject } from '@/types/project'
+import { createEmptyProject, type View } from '@/types/project'
 import { buildFdrArchive, parseFdrArchive } from '@/lib/fdr/serialize'
 import { openFdrFile, saveFdrBlob } from '@/lib/fdr/fileSystemAccess'
+import { deriveViewName } from '@/lib/detection/viewNaming'
 import {
   clearAutosaveSnapshot,
   readAutosaveSnapshot,
@@ -82,6 +83,34 @@ export function useProject() {
     void clearAutosaveSnapshot()
   }, [project, assets, createdAt, fileHandle, markSaved])
 
+  const addView = useCallback(
+    (html: string): string => {
+      const htmlAssetId = crypto.randomUUID()
+      setAsset(`assets/${htmlAssetId}.html`, new Blob([html], { type: 'text/html' }))
+
+      let newViewId = ''
+      updateProject((p) => {
+        const name = deriveViewName(
+          html,
+          p.views.map((v) => v.name),
+          p.views.length + 1,
+        )
+        const view: View = { id: crypto.randomUUID(), name, htmlAssetId, screenshotAssetId: null, blocks: [] }
+        newViewId = view.id
+        return { ...p, views: [...p.views, view] }
+      })
+      return newViewId
+    },
+    [setAsset, updateProject],
+  )
+
+  const deleteView = useCallback(
+    (viewId: string) => {
+      updateProject((p) => ({ ...p, views: p.views.filter((v) => v.id !== viewId) }))
+    },
+    [updateProject],
+  )
+
   const recoverSnapshot = useCallback(() => {
     if (!recoverableSnapshot) return
     loadProject(recoverableSnapshot.project, recoverableSnapshot.assets, {
@@ -107,6 +136,8 @@ export function useProject() {
     saveProject,
     updateProject,
     setAsset,
+    addView,
+    deleteView,
     recoverSnapshot,
     discardSnapshot,
   }
