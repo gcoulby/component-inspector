@@ -6,15 +6,16 @@ import { LoadMockupModal } from '@/components/canvas/LoadMockupModal'
 import { useProject } from '@/hooks/useProject'
 import { useDetection } from '@/hooks/useDetection'
 import { DEFAULT_FILTERS } from '@/data/detectionHeuristics'
+import type { DetectionCategory } from '@/types/project'
 
 export function CanvasPage() {
   const { project, assets, addView, deleteView } = useProject()
-  const { addOrSelectBlockAt } = useDetection()
+  const { addOrSelectBlockAt, autoDetectAt } = useDetection()
 
   const [activeViewId, setActiveViewId] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [mockupHtml, setMockupHtml] = useState<string | null>(null)
-  const [filters] = useState(DEFAULT_FILTERS)
+  const [filters, setFilters] = useState(DEFAULT_FILTERS)
 
   const views = useMemo(() => project?.views ?? [], [project?.views])
   const activeView = views.find((v) => v.id === activeViewId) ?? null
@@ -57,6 +58,15 @@ export function CanvasPage() {
     addOrSelectBlockAt(activeView.id, node, frame)
   }
 
+  const handleAutoDetect = (elements: Element[], frame: DOMRect): number => {
+    if (!activeView) return 0
+    return autoDetectAt(activeView.id, elements, frame)
+  }
+
+  const handleToggleFilter = (category: DetectionCategory) => {
+    setFilters((prev) => ({ ...prev, [category]: !prev[category] }))
+  }
+
   if (!project) {
     return (
       <div className="flex flex-1 items-center justify-center overflow-hidden bg-background">
@@ -79,9 +89,10 @@ export function CanvasPage() {
         mockupHtml={mockupHtml}
         filters={filters}
         onAddBlock={handleAddBlock}
+        onAutoDetect={handleAutoDetect}
         onLoadMockupClick={() => setModalOpen(true)}
       />
-      <InspectorSidebar />
+      <InspectorSidebar filters={filters} onToggleFilter={handleToggleFilter} />
       <LoadMockupModal open={modalOpen} onClose={() => setModalOpen(false)} onLoad={handleLoadMockup} />
     </div>
   )

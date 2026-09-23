@@ -55,6 +55,27 @@ function addOrSelectBlock(project: Project, viewId: string, node: Element, frame
   return { project: { ...project, components, views }, componentId: component.id }
 }
 
+function autoDetectBlocks(
+  project: Project,
+  viewId: string,
+  elements: Element[],
+  frame: DOMRect,
+): { project: Project; addedCount: number } | null {
+  const startingView = project.views.find((v) => v.id === viewId)
+  if (!startingView) return null
+  const startingCount = startingView.blocks.length
+
+  let current = project
+  for (const el of elements) {
+    const result = addOrSelectBlock(current, viewId, el, frame)
+    if (!result) return null
+    current = result.project
+  }
+
+  const endingCount = current.views.find((v) => v.id === viewId)?.blocks.length ?? startingCount
+  return { project: current, addedCount: endingCount - startingCount }
+}
+
 // The only place, alongside useProject, that touches the project store
 // directly — components get this via callbacks, never the store itself.
 export function useDetection() {
@@ -74,5 +95,19 @@ export function useDetection() {
     [updateProject],
   )
 
-  return { addOrSelectBlockAt }
+  const autoDetectAt = useCallback(
+    (viewId: string, elements: Element[], frame: DOMRect): number => {
+      let addedCount = 0
+      updateProject((project) => {
+        const result = autoDetectBlocks(project, viewId, elements, frame)
+        if (!result) return project
+        addedCount = result.addedCount
+        return result.project
+      })
+      return addedCount
+    },
+    [updateProject],
+  )
+
+  return { addOrSelectBlockAt, autoDetectAt }
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import type { View } from '@/types/project'
 import type { DetectionFilters } from '@/data/detectionHeuristics'
-import { autoLabel, findInteresting } from '@/lib/detection/dom'
+import { autoLabel, findInteresting, isInteresting, passesFilter, signatureOf } from '@/lib/detection/dom'
 
 const FRAME_WIDTH = 1280
 const MIN_FRAME_HEIGHT = 500
@@ -18,13 +18,22 @@ interface MockupCanvasProps {
   mockupHtml: string | null
   filters: DetectionFilters
   onAddBlock: (node: Element, frame: DOMRect) => void
+  onAutoDetect: (elements: Element[], frame: DOMRect) => number
   onLoadMockupClick: () => void
 }
 
-export function MockupCanvas({ view, mockupHtml, filters, onAddBlock, onLoadMockupClick }: MockupCanvasProps) {
+export function MockupCanvas({
+  view,
+  mockupHtml,
+  filters,
+  onAddBlock,
+  onAutoDetect,
+  onLoadMockupClick,
+}: MockupCanvasProps) {
   const [inspectMode, setInspectMode] = useState(false)
   const [hover, setHover] = useState<HoverState | null>(null)
   const [frameHeight, setFrameHeight] = useState(MIN_FRAME_HEIGHT)
+  const [detectMessage, setDetectMessage] = useState<string | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const inspectModeRef = useRef(inspectMode)
@@ -40,11 +49,13 @@ export function MockupCanvas({ view, mockupHtml, filters, onAddBlock, onLoadMock
     onAddBlockRef.current = onAddBlock
   }, [onAddBlock])
 
-  const handleFrameLoad = useCallback(() => {
-    const iframe = iframeRef.current
-    const idoc = iframe?.contentDocument
-    if (!iframe || !idoc) return
+  useEffect(() => {
+    if (!detectMessage) return
+    const timer = setTimeout(() => setDetectMessage(null), 3000)
+    return () => clearTimeout(timer)
+  }, [detectMessage])
 
+  const resizeFrame = useCallback((iframe: HTMLIFrameElement, idoc: Document) => {
     // Reset to a fixed baseline before measuring, never to 0px — a shell built
     // on min-height:100vh needs a real viewport to measure against, and never
     // inherit the previous view's height or a vh-based layout won't shrink.
@@ -53,6 +64,14 @@ export function MockupCanvas({ view, mockupHtml, filters, onAddBlock, onLoadMock
     const h = Math.min(Math.max(idoc.documentElement.scrollHeight, MIN_FRAME_HEIGHT), MAX_FRAME_HEIGHT)
     iframe.style.height = `${h}px`
     setFrameHeight(h)
+  }, [])
+
+  const handleFrameLoad = useCallback(() => {
+    const iframe = iframeRef.current
+    const idoc = iframe?.contentDocument
+    if (!iframe || !idoc) return
+
+    resizeFrame(iframe, idoc)
 
     idoc.addEventListener('mousemove', (e) => {
       if (!inspectModeRef.current) return
@@ -72,7 +91,26 @@ export function MockupCanvas({ view, mockupHtml, filters, onAddBlock, onLoadMock
       },
       true,
     )
-  }, [])
+  }, [resizeFrame])
+
+  const handleAutoDetect = useCallback(() => {
+    const iframe = iframeRef.current
+    const idoc = iframe?.contentDocument
+    if (!iframe || !idoc) return
+
+    resizeFrame(iframe, idoc)
+    const frame = iframe.getBoundingClientRect()
+
+    const seen = new Map<string, Element>()
+    idoc.querySelectorAll('*').forEach((el) => {
+      if (!isInteresting(el) || !passesFilter(el, filters)) return
+      const signature = signatureOf(el)
+      if (!seen.has(signature)) seen.set(signature, el)
+    })
+
+    const added = onAutoDetect(Array.from(seen.values()), frame)
+    setDetectMessage(added > 0 ? `Added ${added} detected block${added === 1 ? '' : 's'}` : 'Nothing new found — try Inspect mode for anything unusual')
+  }, [filters, onAutoDetect, resizeFrame])
 
   if (!view || mockupHtml === null) {
     return (
@@ -95,9 +133,13 @@ export function MockupCanvas({ view, mockupHtml, filters, onAddBlock, onLoadMock
         >
           Inspect: {inspectMode ? 'on' : 'off'}
         </Button>
-        {inspectMode && (
+        <Button variant="outline" size="sm" onClick={handleAutoDetect}>
+          Auto-detect
+        </Button>
+        {inspectMode && !detectMessage && (
           <span className="text-xs text-muted-foreground">Hover to highlight, click to box</span>
         )}
+        {detectMessage && <span className="text-xs text-muted-foreground">{detectMessage}</span>}
       </div>
       <div className="flex justify-center p-6">
         <div className="relative shrink-0" style={{ width: FRAME_WIDTH, height: frameHeight }}>
