@@ -24,6 +24,7 @@ interface InspectorSidebarProps {
   onRename: (label: string) => void
   onCategoryChange: (category: ComponentCategory) => void
   onMatchChange: (matchedName: string | null) => void
+  onColorChange: (color: string) => void
   onNotesChange: (notes: string) => void
   onRefUrlChange: (refUrl: string) => void
   onRemoveFromView: () => void
@@ -51,6 +52,7 @@ export function InspectorSidebar({
   onRename,
   onCategoryChange,
   onMatchChange,
+  onColorChange,
   onNotesChange,
   onRefUrlChange,
   onRemoveFromView,
@@ -83,6 +85,7 @@ export function InspectorSidebar({
         onRename={onRename}
         onCategoryChange={onCategoryChange}
         onMatchChange={onMatchChange}
+        onColorChange={onColorChange}
         onNotesChange={onNotesChange}
         onRefUrlChange={onRefUrlChange}
         onRemoveFromView={onRemoveFromView}

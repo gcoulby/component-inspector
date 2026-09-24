@@ -1,6 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
+import { BlockOverlay } from '@/components/canvas/BlockOverlay'
 import { collectDetectableElements, findInteresting, autoLabel, traceLabelFor } from '@/lib/detection/dom'
 import { fingerprintOf } from '@/lib/detection/fingerprint'
 import { MIN_FRAME_HEIGHT, resizeIframeToContent } from '@/lib/iframeResize'
@@ -8,9 +8,8 @@ import { captureScreenshot } from '@/lib/screenshot'
 import { debounce } from '@/lib/debounce'
 import { useLiveSessionStore } from '@/store/liveSessionStore'
 import { useToastStore } from '@/store/toastStore'
-import { CATEGORY_STYLES } from '@/data/categoryPresentation'
 import type { DetectionFilters } from '@/data/detectionHeuristics'
-import type { ProjectComponent, View } from '@/types/project'
+import type { ProjectComponent, RectPct, View } from '@/types/project'
 
 const FRAME_WIDTH = 1280
 const SETTLE_DEBOUNCE_MS = 350
@@ -35,6 +34,7 @@ interface InteractiveWorkspaceProps {
   onAutoDetectView: (viewId: string, elements: Element[], frame: DOMRect) => number
   onFlowLine: (from: string, to: string, label: string) => void
   onSelectComponent: (componentId: string) => void
+  onRectChange: (viewId: string, blockId: string, rectPct: RectPct) => void
 }
 
 // The only place a mockup ever actually runs — every saved view comes from
@@ -42,7 +42,18 @@ interface InteractiveWorkspaceProps {
 // Static views elsewhere are frozen screenshots of what got committed here.
 export const InteractiveWorkspace = forwardRef<InteractiveWorkspaceHandle, InteractiveWorkspaceProps>(
   function InteractiveWorkspace(
-    { filters, views, components, selectedComponentId, onCommitView, onAddBlock, onAutoDetectView, onFlowLine, onSelectComponent },
+    {
+      filters,
+      views,
+      components,
+      selectedComponentId,
+      onCommitView,
+      onAddBlock,
+      onAutoDetectView,
+      onFlowLine,
+      onSelectComponent,
+      onRectChange,
+    },
     ref,
   ) {
     const rootHtml = useLiveSessionStore((s) => s.rootHtml)
@@ -60,6 +71,7 @@ export const InteractiveWorkspace = forwardRef<InteractiveWorkspaceHandle, Inter
     const [currentViewId, setCurrentViewId] = useState<string | null>(null)
 
     const iframeRef = useRef<HTMLIFrameElement>(null)
+    const frameWrapRef = useRef<HTMLDivElement>(null)
     const observerRef = useRef<MutationObserver | null>(null)
     const currentViewIdRef = useRef<string | null>(null)
     const currentFpRef = useRef<string | null>(null)
@@ -93,9 +105,12 @@ export const InteractiveWorkspace = forwardRef<InteractiveWorkspaceHandle, Inter
       const idoc = iframe?.contentDocument
       if (!iframe || !idoc) return null
 
-      const frame = iframe.getBoundingClientRect()
+      // Re-measure right before every capture, not just at initial load — an
+      // SPA-style mockup can grow taller via DOM mutations alone (no reload),
+      // and a stale, too-short iframe rect makes html2canvas crop the page.
+      setFrameHeight(resizeIframeToContent(iframe, idoc))
       const html = idoc.documentElement.outerHTML
-      const screenshotBlob = await captureScreenshot(idoc, frame.width, frame.height)
+      const screenshotBlob = await captureScreenshot(iframe, idoc)
       const { viewId, name } = onCommitView(html, screenshotBlob)
 
       setCurrentView(viewId)
@@ -303,6 +318,7 @@ export const InteractiveWorkspace = forwardRef<InteractiveWorkspaceHandle, Inter
         </div>
         <div className="flex justify-center p-8">
           <div
+            ref={frameWrapRef}
             className="relative shrink-0 overflow-hidden rounded bg-black shadow-[0_0_0_1px_hsl(var(--border)),0_24px_60px_rgba(0,0,0,0.5)]"
             style={{ width: FRAME_WIDTH, height: frameHeight }}
           >
@@ -318,33 +334,19 @@ export const InteractiveWorkspace = forwardRef<InteractiveWorkspaceHandle, Inter
               {showBoxes &&
                 currentView?.blocks.map((block) => {
                   const component = components.find((c) => c.id === block.componentId)
-                  const style = CATEGORY_STYLES[component?.category ?? 'unmatched']
+                  if (!component) return null
                   return (
-                    <div
+                    <BlockOverlay
                       key={block.id}
-                      onClick={() => onSelectComponent(block.componentId)}
-                      className={cn(
-                        'pointer-events-auto absolute cursor-pointer rounded-sm border-2',
-                        style.border,
-                        style.bg,
-                        block.componentId === selectedComponentId && 'ring-2 ring-white',
-                      )}
-                      style={{
-                        left: `${block.rectPct.left}%`,
-                        top: `${block.rectPct.top}%`,
-                        width: `${block.rectPct.width}%`,
-                        height: `${block.rectPct.height}%`,
-                      }}
-                    >
-                      <span
-                        className={cn(
-                          'pointer-events-none absolute -top-[19px] left-[-2px] whitespace-nowrap rounded-t px-1.5 py-0.5 font-mono text-[10px] font-semibold',
-                          style.tag,
-                        )}
-                      >
-                        {component?.label ?? block.tag}
-                      </span>
-                    </div>
+                      block={block}
+                      label={component.label}
+                      color={component.color}
+                      category={component.category}
+                      selected={block.componentId === selectedComponentId}
+                      frameRef={frameWrapRef}
+                      onSelect={() => onSelectComponent(block.componentId)}
+                      onRectChange={(rectPct) => currentViewId && onRectChange(currentViewId, block.id, rectPct)}
+                    />
                   )
                 })}
               {hover && (

@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils'
-import { CATEGORY_STYLES } from '@/data/categoryPresentation'
+import { CATEGORY_ICONS } from '@/data/categoryPresentation'
 import type { ProjectComponent, View } from '@/types/project'
 
 interface ComponentListProps {
@@ -49,10 +49,10 @@ export function ComponentList({ view, components, selectedComponentId, onSelect 
                 g.component.id === selectedComponentId ? 'bg-accent' : 'hover:bg-accent/50',
               )}
             >
-              <span className={cn('h-2 w-2 shrink-0 rounded-full', CATEGORY_STYLES[g.component.category].dot)} />
+              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: g.component.color }} />
               <span className="flex-1 overflow-hidden">
                 <span className="block truncate text-foreground">
-                  {g.component.label}
+                  {CATEGORY_ICONS[g.component.category]} {g.component.label}
                   {g.component.notes && ' 📝'}
                   {g.component.refUrl && ' 🔗'}
                 </span>

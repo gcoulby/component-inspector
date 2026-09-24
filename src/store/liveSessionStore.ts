@@ -9,10 +9,12 @@ interface LiveSessionState {
   recording: boolean
   inspectMode: boolean
   showBoxes: boolean
+  drawBoxMode: boolean
   setRootHtml: (html: string | null) => void
   setRecording: (recording: boolean) => void
   setInspectMode: (inspectMode: boolean) => void
   setShowBoxes: (showBoxes: boolean) => void
+  setDrawBoxMode: (drawBoxMode: boolean) => void
 }
 
 export const useLiveSessionStore = create<LiveSessionState>((set) => ({
@@ -20,8 +22,10 @@ export const useLiveSessionStore = create<LiveSessionState>((set) => ({
   recording: false,
   inspectMode: false,
   showBoxes: true,
+  drawBoxMode: false,
   setRootHtml: (rootHtml) => set({ rootHtml }),
   setRecording: (recording) => set({ recording }),
   setInspectMode: (inspectMode) => set({ inspectMode }),
   setShowBoxes: (showBoxes) => set({ showBoxes }),
+  setDrawBoxMode: (drawBoxMode) => set({ drawBoxMode }),
 }))

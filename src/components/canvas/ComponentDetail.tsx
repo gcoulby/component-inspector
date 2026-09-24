@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CATEGORY_OPTIONS } from '@/data/categoryPresentation'
+import { COMPONENT_COLOR_PALETTE } from '@/data/componentColors'
 import type { ComponentCategory, ManifestEntry, ProjectComponent } from '@/types/project'
 
 interface ComponentDetailProps {
@@ -11,6 +12,7 @@ interface ComponentDetailProps {
   onRename: (label: string) => void
   onCategoryChange: (category: ComponentCategory) => void
   onMatchChange: (matchedName: string | null) => void
+  onColorChange: (color: string) => void
   onNotesChange: (notes: string) => void
   onRefUrlChange: (refUrl: string) => void
   onRemoveFromView: () => void
@@ -23,6 +25,7 @@ export function ComponentDetail({
   onRename,
   onCategoryChange,
   onMatchChange,
+  onColorChange,
   onNotesChange,
   onRefUrlChange,
   onRemoveFromView,
@@ -69,6 +72,21 @@ export function ComponentDetail({
             >
               {opt.label}
             </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-1">
+        <span className="text-muted-foreground">Box color</span>
+        <div className="flex flex-wrap gap-1">
+          {COMPONENT_COLOR_PALETTE.map((hex) => (
+            <button
+              key={hex}
+              title={hex}
+              onClick={() => onColorChange(hex)}
+              className={cn('h-5 w-5 rounded-sm border', component.color === hex ? 'border-white' : 'border-transparent')}
+              style={{ backgroundColor: hex }}
+            />
           ))}
         </div>
       </div>

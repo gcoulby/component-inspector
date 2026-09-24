@@ -11,7 +11,13 @@ export interface ProjectComponent {
   matchedName: string | null
   notes: string
   refUrl: string
+  // Box border/tag color — auto-assigned per distinct component so every
+  // instance of the same component reads as one color across every view.
+  // Never derived from `category`; that's what the status icon is for.
+  color: string
 }
+
+export type RectPct = { left: number; top: number; width: number; height: number }
 
 // A single boxed instance of a component on one view.
 export interface Block {
@@ -19,7 +25,7 @@ export interface Block {
   componentId: string
   signature: string
   tag: string
-  rectPct: { left: number; top: number; width: number; height: number }
+  rectPct: RectPct
 }
 
 export interface View {

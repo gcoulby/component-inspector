@@ -10,7 +10,7 @@ import { useLiveSessionStore } from '@/store/liveSessionStore'
 import { useToastStore } from '@/store/toastStore'
 import { DEFAULT_FILTERS } from '@/data/detectionHeuristics'
 import { LIVE_VIEW_ID } from '@/lib/liveSession'
-import type { ComponentCategory, DetectionCategory } from '@/types/project'
+import type { ComponentCategory, DetectionCategory, RectPct } from '@/types/project'
 
 interface CanvasPageProps {
   activeViewId: string
@@ -38,6 +38,9 @@ export function CanvasPage({
     setComponentNotesAt,
     setComponentRefUrlAt,
     removeBlockFromViewAt,
+    setComponentColorAt,
+    setBlockRectAt,
+    addManualBlockAt,
   } = useDetection()
   const setLiveRootHtml = useLiveSessionStore((s) => s.setRootHtml)
   const setLiveRecording = useLiveSessionStore((s) => s.setRecording)
@@ -142,6 +145,7 @@ export function CanvasPage({
           onAutoDetectView={autoDetectAt}
           onFlowLine={addFlowLine}
           onSelectComponent={setSelectedComponentId}
+          onRectChange={(viewId, blockId, rectPct) => setBlockRectAt(viewId, blockId, rectPct)}
         />
       </div>
       {activeViewId !== LIVE_VIEW_ID && activeView && (
@@ -151,6 +155,11 @@ export function CanvasPage({
           components={components}
           selectedComponentId={selectedComponentId}
           onSelectComponent={setSelectedComponentId}
+          onRectChange={(blockId, rectPct: RectPct) => setBlockRectAt(activeView.id, blockId, rectPct)}
+          onDrawBlock={(rectPct: RectPct) => {
+            const componentId = addManualBlockAt(activeView.id, rectPct)
+            if (componentId) setSelectedComponentId(componentId)
+          }}
         />
       )}
       <InspectorSidebar
@@ -173,6 +182,7 @@ export function CanvasPage({
           selectedComponentId && setComponentCategoryAt(selectedComponentId, category)
         }
         onMatchChange={(matchedName) => selectedComponentId && setComponentMatchAt(selectedComponentId, matchedName)}
+        onColorChange={(color) => selectedComponentId && setComponentColorAt(selectedComponentId, color)}
         onNotesChange={(notes) => selectedComponentId && setComponentNotesAt(selectedComponentId, notes)}
         onRefUrlChange={(refUrl) => selectedComponentId && setComponentRefUrlAt(selectedComponentId, refUrl)}
         onRemoveFromView={handleRemoveFromView}

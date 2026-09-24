@@ -1,36 +1,20 @@
 import { useCallback } from 'react'
 import { useProjectStore } from '@/store/projectStore'
-import type { Block, ComponentCategory, Project, ProjectComponent } from '@/types/project'
+import type { Block, ComponentCategory, Project, RectPct } from '@/types/project'
 import { autoLabel, rectPctOfLive, signatureOf } from '@/lib/detection/dom'
 import { matchManifest } from '@/lib/detection/manifestMatch'
 import {
+  addManualBlock,
+  getOrCreateComponent,
   removeBlockFromView,
   renameComponent,
+  setBlockRect,
   setComponentCategory,
+  setComponentColor,
   setComponentMatch,
   setComponentNotes,
   setComponentRefUrl,
 } from '@/lib/detection/componentRegistry'
-
-function getOrCreateComponent(
-  components: ProjectComponent[],
-  label: string,
-  category: ComponentCategory,
-  matchedName: string | null,
-): { components: ProjectComponent[]; component: ProjectComponent } {
-  const existing = components.find((c) => c.label.toLowerCase() === label.toLowerCase())
-  if (existing) return { components, component: existing }
-
-  const component: ProjectComponent = {
-    id: crypto.randomUUID(),
-    label,
-    category,
-    matchedName,
-    notes: '',
-    refUrl: '',
-  }
-  return { components: [...components, component], component }
-}
 
 function addOrSelectBlock(project: Project, viewId: string, node: Element, frame: DOMRect): { project: Project; componentId: string } | null {
   const view = project.views.find((v) => v.id === viewId)
@@ -149,6 +133,31 @@ export function useDetection() {
     [updateProject],
   )
 
+  const setComponentColorAt = useCallback(
+    (componentId: string, color: string) => updateProject((project) => setComponentColor(project, componentId, color)),
+    [updateProject],
+  )
+
+  const setBlockRectAt = useCallback(
+    (viewId: string, blockId: string, rectPct: RectPct) =>
+      updateProject((project) => setBlockRect(project, viewId, blockId, rectPct)),
+    [updateProject],
+  )
+
+  const addManualBlockAt = useCallback(
+    (viewId: string, rectPct: RectPct): string | null => {
+      let selectedComponentId: string | null = null
+      updateProject((project) => {
+        const result = addManualBlock(project, viewId, rectPct)
+        if (!result) return project
+        selectedComponentId = result.componentId
+        return result.project
+      })
+      return selectedComponentId
+    },
+    [updateProject],
+  )
+
   return {
     addOrSelectBlockAt,
     autoDetectAt,
@@ -158,5 +167,8 @@ export function useDetection() {
     setComponentNotesAt,
     setComponentRefUrlAt,
     removeBlockFromViewAt,
+    setComponentColorAt,
+    setBlockRectAt,
+    addManualBlockAt,
   }
 }
