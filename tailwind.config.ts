@@ -44,6 +44,21 @@ export default {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
+        'border-strong': 'hsl(var(--border-strong))',
+        'muted-faint': 'hsl(var(--muted-faint))',
+        // Category / live-session accents — the PoC's exact palette, not the
+        // nearest Tailwind-named color. Used by categoryPresentation.ts and
+        // anywhere the recording/inspect state needs its real color.
+        'cat-new': 'hsl(var(--cat-new))',
+        'cat-undocumented': 'hsl(var(--cat-undocumented))',
+        'cat-matched': 'hsl(var(--cat-matched))',
+        'cat-unmatched': 'hsl(var(--cat-unmatched))',
+        live: 'hsl(var(--live))',
+        rec: 'hsl(var(--rec))',
+      },
+      fontFamily: {
+        sans: ['Inter', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--radius)',

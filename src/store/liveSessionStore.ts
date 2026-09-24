@@ -7,13 +7,21 @@ import { create } from 'zustand'
 interface LiveSessionState {
   rootHtml: string | null
   recording: boolean
+  inspectMode: boolean
+  showBoxes: boolean
   setRootHtml: (html: string | null) => void
   setRecording: (recording: boolean) => void
+  setInspectMode: (inspectMode: boolean) => void
+  setShowBoxes: (showBoxes: boolean) => void
 }
 
 export const useLiveSessionStore = create<LiveSessionState>((set) => ({
   rootHtml: null,
   recording: false,
+  inspectMode: false,
+  showBoxes: true,
   setRootHtml: (rootHtml) => set({ rootHtml }),
   setRecording: (recording) => set({ recording }),
+  setInspectMode: (inspectMode) => set({ inspectMode }),
+  setShowBoxes: (showBoxes) => set({ showBoxes }),
 }))

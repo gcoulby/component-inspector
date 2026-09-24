@@ -7,22 +7,30 @@ function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'x'
 }
 
-export function buildMarkdownReport(project: Project): string {
+// Per-view screenshots always render — showGraphImages only controls whether
+// the Mermaid diagram's own nodes carry a thumbnail. The "no-thumbnail"
+// export exists because not every Markdown renderer (or Mermaid version) on
+// the receiving end supports HTML labels, and a plain-text graph degrades
+// safely everywhere.
+export function buildMarkdownReport(project: Project, showGraphImages: boolean): string {
   const edges = parseFlowText(project.flowText)
   let md = '# Componentised breakdown\n\n'
 
   if (edges.length > 0) {
-    const def = buildMermaidDefinition(edges, project.views, true, (view) =>
+    const def = buildMermaidDefinition(edges, project.views, showGraphImages, (view) =>
       view.screenshotAssetId ? `assets/${view.screenshotAssetId}.png` : null,
     )
     md += '```mermaid\n' + def + '```\n\n'
-    md +=
-      '_Note: node images require a Mermaid renderer with HTML labels enabled. The plain flow is still there in the diagram text either way._\n\n'
+    if (showGraphImages) {
+      md +=
+        '_Note: node images require a Mermaid renderer with HTML labels enabled. The plain flow is still there in the diagram text either way._\n\n'
+    }
   }
 
   project.views.forEach((view, i) => {
     md += `## View ${i}: ${view.name}\n\n`
     if (view.screenshotAssetId) md += `![${view.name}](assets/${view.screenshotAssetId}.png)\n\n`
+    if (view.details) md += `${view.details}\n\n`
 
     const counts = new Map<string, number>()
     for (const block of view.blocks) {

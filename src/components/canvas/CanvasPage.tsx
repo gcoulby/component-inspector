@@ -1,17 +1,34 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type RefObject } from 'react'
 import { ViewsSidebar } from '@/components/canvas/ViewsSidebar'
 import { MockupCanvas } from '@/components/canvas/MockupCanvas'
-import { InteractiveWorkspace } from '@/components/canvas/InteractiveWorkspace'
+import { InteractiveWorkspace, type InteractiveWorkspaceHandle } from '@/components/canvas/InteractiveWorkspace'
 import { InspectorSidebar } from '@/components/canvas/InspectorSidebar'
 import { LoadMockupModal } from '@/components/canvas/LoadMockupModal'
 import { useProject } from '@/hooks/useProject'
 import { useDetection } from '@/hooks/useDetection'
+import { useLiveSessionStore } from '@/store/liveSessionStore'
+import { useToastStore } from '@/store/toastStore'
 import { DEFAULT_FILTERS } from '@/data/detectionHeuristics'
 import { LIVE_VIEW_ID } from '@/lib/liveSession'
 import type { ComponentCategory, DetectionCategory } from '@/types/project'
 
-export function CanvasPage() {
-  const { project, assets, addView, deleteView, commitView, addFlowLine, updateProject } = useProject()
+interface CanvasPageProps {
+  activeViewId: string
+  onActiveViewIdChange: (viewId: string) => void
+  modalOpen: boolean
+  onModalOpenChange: (open: boolean) => void
+  workspaceRef: RefObject<InteractiveWorkspaceHandle>
+}
+
+export function CanvasPage({
+  activeViewId,
+  onActiveViewIdChange,
+  modalOpen,
+  onModalOpenChange,
+  workspaceRef,
+}: CanvasPageProps) {
+  const { project, assets, deleteView, renameView, setViewDetails, mergeViews, commitView, addFlowLine, updateProject } =
+    useProject()
   const {
     addOrSelectBlockAt,
     autoDetectAt,
@@ -22,10 +39,10 @@ export function CanvasPage() {
     setComponentRefUrlAt,
     removeBlockFromViewAt,
   } = useDetection()
+  const setLiveRootHtml = useLiveSessionStore((s) => s.setRootHtml)
+  const setLiveRecording = useLiveSessionStore((s) => s.setRecording)
+  const toast = useToastStore((s) => s.show)
 
-  const [activeViewId, setActiveViewId] = useState<string | null>(null)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [mockupHtml, setMockupHtml] = useState<string | null>(null)
   const [filters, setFilters] = useState(DEFAULT_FILTERS)
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null)
 
@@ -36,12 +53,10 @@ export function CanvasPage() {
 
   useEffect(() => {
     if (activeViewId === LIVE_VIEW_ID) return
-    if (!activeViewId && views.length > 0) {
-      setActiveViewId(views[0].id)
-    } else if (activeViewId && !views.some((v) => v.id === activeViewId)) {
-      setActiveViewId(views[0]?.id ?? null)
+    if (!views.some((v) => v.id === activeViewId)) {
+      onActiveViewIdChange(LIVE_VIEW_ID)
     }
-  }, [views, activeViewId])
+  }, [views, activeViewId, onActiveViewIdChange])
 
   useEffect(() => {
     setSelectedComponentId(null)
@@ -63,40 +78,14 @@ export function CanvasPage() {
     }
   }, [thumbnails])
 
-  useEffect(() => {
-    if (!activeView) {
-      setMockupHtml(null)
-      return
-    }
-    const blob = assets.get(`assets/${activeView.htmlAssetId}.html`)
-    if (!blob) {
-      setMockupHtml(null)
-      return
-    }
-    let cancelled = false
-    blob.text().then((text) => {
-      if (!cancelled) setMockupHtml(text)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [activeView, assets])
-
+  // The toolbar's only mockup-loading entry point — it always (re)starts the
+  // Interactive session, matching the PoC where "+ Load mockup" never has
+  // any other destination.
   const handleLoadMockup = (html: string) => {
-    const newViewId = addView(html)
-    setActiveViewId(newViewId)
-    setModalOpen(false)
-  }
-
-  const handleAddBlock = (node: Element, frame: DOMRect) => {
-    if (!activeView) return
-    const componentId = addOrSelectBlockAt(activeView.id, node, frame)
-    if (componentId) setSelectedComponentId(componentId)
-  }
-
-  const handleAutoDetect = (elements: Element[], frame: DOMRect): number => {
-    if (!activeView) return 0
-    return autoDetectAt(activeView.id, elements, frame)
+    setLiveRecording(false)
+    setLiveRootHtml(html)
+    onActiveViewIdChange(LIVE_VIEW_ID)
+    onModalOpenChange(false)
   }
 
   const handleToggleFilter = (category: DetectionCategory) => {
@@ -107,6 +96,14 @@ export function CanvasPage() {
     if (!activeView || !selectedComponentId) return
     removeBlockFromViewAt(activeView.id, selectedComponentId)
     setSelectedComponentId(null)
+  }
+
+  const handleMergeView = (targetId: string) => {
+    if (!activeView) return
+    const targetName = views.find((v) => v.id === targetId)?.name ?? ''
+    mergeViews(activeView.id, targetId)
+    onActiveViewIdChange(targetId)
+    toast(`Merged into "${targetName}"`)
   }
 
   const usedElsewhere =
@@ -128,40 +125,49 @@ export function CanvasPage() {
         views={views}
         activeViewId={activeViewId}
         thumbnails={thumbnails}
-        onSelect={setActiveViewId}
+        onSelect={onActiveViewIdChange}
         onDelete={deleteView}
-        onAdd={() => setModalOpen(true)}
       />
-      {activeViewId === LIVE_VIEW_ID ? (
+      {/* Kept mounted even when a static view is selected, not conditionally
+          rendered, so the live mockup never reloads just from switching views. */}
+      <div className={activeViewId === LIVE_VIEW_ID ? 'contents' : 'hidden'}>
         <InteractiveWorkspace
+          ref={workspaceRef}
           filters={filters}
-          onCommitView={commitView}
-          onAutoDetectView={autoDetectAt}
-          onFlowLine={addFlowLine}
-        />
-      ) : (
-        <MockupCanvas
-          view={activeView}
-          mockupHtml={mockupHtml}
-          filters={filters}
+          views={views}
           components={components}
           selectedComponentId={selectedComponentId}
-          onAddBlock={handleAddBlock}
-          onAutoDetect={handleAutoDetect}
+          onCommitView={commitView}
+          onAddBlock={addOrSelectBlockAt}
+          onAutoDetectView={autoDetectAt}
+          onFlowLine={addFlowLine}
           onSelectComponent={setSelectedComponentId}
-          onLoadMockupClick={() => setModalOpen(true)}
+        />
+      </div>
+      {activeViewId !== LIVE_VIEW_ID && activeView && (
+        <MockupCanvas
+          view={activeView}
+          screenshotUrl={thumbnails.get(activeView.id) ?? null}
+          components={components}
+          selectedComponentId={selectedComponentId}
+          onSelectComponent={setSelectedComponentId}
         />
       )}
       <InspectorSidebar
         filters={filters}
         onToggleFilter={handleToggleFilter}
+        isInteractiveActive={activeViewId === LIVE_VIEW_ID}
         view={activeView}
+        views={views}
         components={components}
         manifest={manifest}
         onManifestChange={(newManifest) => updateProject((p) => ({ ...p, manifest: newManifest }))}
         selectedComponentId={selectedComponentId}
         onSelectComponent={setSelectedComponentId}
         usedElsewhere={usedElsewhere}
+        onRenameView={(name) => activeView && renameView(activeView.id, name)}
+        onViewDetailsChange={(details) => activeView && setViewDetails(activeView.id, details)}
+        onMergeView={handleMergeView}
         onRename={(label) => selectedComponentId && renameComponentAt(selectedComponentId, label)}
         onCategoryChange={(category: ComponentCategory) =>
           selectedComponentId && setComponentCategoryAt(selectedComponentId, category)
@@ -171,7 +177,7 @@ export function CanvasPage() {
         onRefUrlChange={(refUrl) => selectedComponentId && setComponentRefUrlAt(selectedComponentId, refUrl)}
         onRemoveFromView={handleRemoveFromView}
       />
-      <LoadMockupModal open={modalOpen} onClose={() => setModalOpen(false)} onLoad={handleLoadMockup} />
+      <LoadMockupModal open={modalOpen} onClose={() => onModalOpenChange(false)} onLoad={handleLoadMockup} />
     </div>
   )
 }

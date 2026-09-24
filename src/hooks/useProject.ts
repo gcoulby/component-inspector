@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useProjectStore } from '@/store/projectStore'
 import { createEmptyProject, type View } from '@/types/project'
+import { DEFAULT_MANIFEST } from '@/data/defaultManifest'
 import { buildFdrArchive, parseFdrArchive } from '@/lib/fdr/serialize'
 import { openFdrFile, saveFdrBlob } from '@/lib/fdr/fileSystemAccess'
 import { deriveViewName } from '@/lib/detection/viewNaming'
-import { appendFlowLine } from '@/lib/flow/flowText'
+import { appendFlowLine, renameNodeInFlow } from '@/lib/flow/flowText'
 import {
   clearAutosaveSnapshot,
   readAutosaveSnapshot,
@@ -54,7 +55,10 @@ export function useProject() {
 
   const newProject = useCallback(
     (name: string) => {
-      loadProject(createEmptyProject(name), new Map(), { handle: null, createdAt: new Date().toISOString() })
+      loadProject(createEmptyProject(name, DEFAULT_MANIFEST.slice()), new Map(), {
+        handle: null,
+        createdAt: new Date().toISOString(),
+      })
       void clearAutosaveSnapshot()
       setRecoverableSnapshot(null)
     },
@@ -84,30 +88,50 @@ export function useProject() {
     void clearAutosaveSnapshot()
   }, [project, assets, createdAt, fileHandle, markSaved])
 
-  const addView = useCallback(
-    (html: string): string => {
-      const htmlAssetId = crypto.randomUUID()
-      setAsset(`assets/${htmlAssetId}.html`, new Blob([html], { type: 'text/html' }))
-
-      let newViewId = ''
-      updateProject((p) => {
-        const name = deriveViewName(
-          html,
-          p.views.map((v) => v.name),
-          p.views.length + 1,
-        )
-        const view: View = { id: crypto.randomUUID(), name, htmlAssetId, screenshotAssetId: null, blocks: [] }
-        newViewId = view.id
-        return { ...p, views: [...p.views, view] }
-      })
-      return newViewId
-    },
-    [setAsset, updateProject],
-  )
-
   const deleteView = useCallback(
     (viewId: string) => {
       updateProject((p) => ({ ...p, views: p.views.filter((v) => v.id !== viewId) }))
+    },
+    [updateProject],
+  )
+
+  const renameView = useCallback(
+    (viewId: string, name: string) => {
+      updateProject((p) => ({ ...p, views: p.views.map((v) => (v.id === viewId ? { ...v, name } : v)) }))
+    },
+    [updateProject],
+  )
+
+  const setViewDetails = useCallback(
+    (viewId: string, details: string) => {
+      updateProject((p) => ({ ...p, views: p.views.map((v) => (v.id === viewId ? { ...v, details } : v)) }))
+    },
+    [updateProject],
+  )
+
+  // Deliberately does NOT merge source's blocks into target's — the
+  // assumption behind a manual merge is "this is the same screen", so the
+  // target's own components are the correct record for it, not a union with
+  // a second capture's boxes. Only fills in the target's screenshot/details
+  // if it's missing them.
+  const mergeViews = useCallback(
+    (sourceId: string, targetId: string) => {
+      if (sourceId === targetId) return
+      updateProject((p) => {
+        const source = p.views.find((v) => v.id === sourceId)
+        const target = p.views.find((v) => v.id === targetId)
+        if (!source || !target) return p
+        const mergedTarget: View = {
+          ...target,
+          screenshotAssetId: target.screenshotAssetId ?? source.screenshotAssetId,
+          details: target.details || source.details,
+        }
+        return {
+          ...p,
+          views: p.views.filter((v) => v.id !== sourceId).map((v) => (v.id === targetId ? mergedTarget : v)),
+          flowText: renameNodeInFlow(p.flowText, source.name, target.name),
+        }
+      })
     },
     [updateProject],
   )
@@ -132,7 +156,7 @@ export function useProject() {
           p.views.map((v) => v.name),
           p.views.length + 1,
         )
-        const view: View = { id: crypto.randomUUID(), name, htmlAssetId, screenshotAssetId, blocks: [] }
+        const view: View = { id: crypto.randomUUID(), name, details: '', htmlAssetId, screenshotAssetId, blocks: [] }
         result = { viewId: view.id, name }
         return { ...p, views: [...p.views, view] }
       })
@@ -173,8 +197,10 @@ export function useProject() {
     saveProject,
     updateProject,
     setAsset,
-    addView,
     deleteView,
+    renameView,
+    setViewDetails,
+    mergeViews,
     commitView,
     addFlowLine,
     recoverSnapshot,

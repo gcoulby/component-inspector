@@ -11,6 +11,13 @@ const buttonVariants = cva(
         destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         outline: 'border border-input bg-transparent hover:bg-accent hover:text-accent-foreground',
+        // Mirrors the PoC's .btn.accent (Inspect toggle) — outlined blue,
+        // solid blue with dark text once active.
+        accentOutline: 'border border-cat-undocumented/70 bg-transparent text-cat-undocumented hover:bg-cat-undocumented/10',
+        accentActive: 'border border-cat-undocumented bg-cat-undocumented text-[#04121f] hover:bg-cat-undocumented/90',
+        // Mirrors .btn.rec (Recording toggle) — outlined red, solid red once active.
+        recOutline: 'border border-rec/70 bg-transparent text-rec hover:bg-rec/10',
+        recActive: 'border border-rec bg-rec text-[#1a0505] hover:bg-rec/90',
       },
       size: {
         default: 'h-9 px-4 py-2',

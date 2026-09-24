@@ -9,29 +9,19 @@ interface ViewsSidebarProps {
   thumbnails: Map<string, string>
   onSelect: (viewId: string) => void
   onDelete: (viewId: string) => void
-  onAdd: () => void
 }
 
-export function ViewsSidebar({ views, activeViewId, thumbnails, onSelect, onDelete, onAdd }: ViewsSidebarProps) {
+export function ViewsSidebar({ views, activeViewId, thumbnails, onSelect, onDelete }: ViewsSidebarProps) {
   return (
     <aside className="flex w-44 shrink-0 flex-col border-r border-border bg-card">
-      <div className="flex items-center justify-between px-2 py-2">
-        <span className="text-xs font-medium text-muted-foreground">Views</span>
-        <button
-          onClick={onAdd}
-          className="rounded px-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          + Add
-        </button>
-      </div>
-      <div className="shrink-0 border-b border-border px-1.5 pb-2">
+      <div className="shrink-0 border-b border-border p-1.5">
         <div
           onClick={() => onSelect(LIVE_VIEW_ID)}
           className={cn(
-            'flex cursor-pointer items-center gap-1 rounded-md border border-dashed px-2 py-1.5 text-xs',
+            'flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1.5 text-xs text-live',
             activeViewId === LIVE_VIEW_ID
-              ? 'border-primary bg-accent text-foreground'
-              : 'border-border text-muted-foreground hover:bg-accent/50',
+              ? 'border-live bg-accent'
+              : 'border-transparent hover:bg-accent/50',
           )}
         >
           <span className="flex-1 truncate">🖥️ Interactive</span>
@@ -46,8 +36,10 @@ export function ViewsSidebar({ views, activeViewId, thumbnails, onSelect, onDele
             key={view.id}
             onClick={() => onSelect(view.id)}
             className={cn(
-              'group flex cursor-pointer items-center gap-1 rounded-md px-2 py-1.5 text-xs',
-              view.id === activeViewId ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent/50',
+              'group flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1.5 text-xs',
+              view.id === activeViewId
+                ? 'border-border-strong bg-accent text-foreground'
+                : 'border-transparent text-muted-foreground hover:bg-accent/50',
             )}
           >
             {thumbnails.has(view.id) && (

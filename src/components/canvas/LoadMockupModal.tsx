@@ -26,9 +26,11 @@ export function LoadMockupModal({ open, onClose, onLoad }: LoadMockupModalProps)
       }}
     >
       <div className="flex w-[600px] max-w-[90vw] flex-col gap-3 rounded-lg border border-border bg-card p-5">
-        <h2 className="text-sm font-semibold">Load mockup</h2>
+        <h2 className="text-sm font-semibold">Load a mockup</h2>
         <p className="text-xs text-muted-foreground">
-          Paste the full HTML of a single screen. It becomes a new view you can box up.
+          Paste the whole single-file mockup — a single screen or a full SPA flow both work. It loads live so you
+          can click through it; start recording or hit &ldquo;Save view&rdquo; whenever you want to freeze the
+          current screen.
         </p>
         <textarea
           className="h-56 w-full resize-y rounded-md border border-input bg-secondary p-2.5 font-mono text-xs text-foreground"

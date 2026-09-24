@@ -1,220 +1,371 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { collectDetectableElements, traceLabelFor } from '@/lib/detection/dom'
+import { cn } from '@/lib/utils'
+import { collectDetectableElements, findInteresting, autoLabel, traceLabelFor } from '@/lib/detection/dom'
 import { fingerprintOf } from '@/lib/detection/fingerprint'
 import { MIN_FRAME_HEIGHT, resizeIframeToContent } from '@/lib/iframeResize'
 import { captureScreenshot } from '@/lib/screenshot'
 import { debounce } from '@/lib/debounce'
 import { useLiveSessionStore } from '@/store/liveSessionStore'
+import { useToastStore } from '@/store/toastStore'
+import { CATEGORY_STYLES } from '@/data/categoryPresentation'
 import type { DetectionFilters } from '@/data/detectionHeuristics'
+import type { ProjectComponent, View } from '@/types/project'
 
 const FRAME_WIDTH = 1280
 const SETTLE_DEBOUNCE_MS = 350
 
-interface InteractiveWorkspaceProps {
-  filters: DetectionFilters
-  onCommitView: (html: string, screenshotBlob: Blob | null) => { viewId: string; name: string }
-  onAutoDetectView: (viewId: string, elements: Element[], frame: DOMRect) => number
-  onFlowLine: (from: string, to: string, label: string) => void
+interface HoverState {
+  rect: DOMRect
+  label: string
 }
 
-export function InteractiveWorkspace({
-  filters,
-  onCommitView,
-  onAutoDetectView,
-  onFlowLine,
-}: InteractiveWorkspaceProps) {
-  const rootHtml = useLiveSessionStore((s) => s.rootHtml)
-  const setRootHtml = useLiveSessionStore((s) => s.setRootHtml)
-  const recording = useLiveSessionStore((s) => s.recording)
-  const setRecording = useLiveSessionStore((s) => s.setRecording)
+export interface InteractiveWorkspaceHandle {
+  autoDetect: () => void
+  saveView: () => void
+}
 
-  const [pasting, setPasting] = useState(false)
-  const [pasteText, setPasteText] = useState('')
-  const [frameHeight, setFrameHeight] = useState(MIN_FRAME_HEIGHT)
-  const [status, setStatus] = useState<string | null>(null)
+interface InteractiveWorkspaceProps {
+  filters: DetectionFilters
+  views: View[]
+  components: ProjectComponent[]
+  selectedComponentId: string | null
+  onCommitView: (html: string, screenshotBlob: Blob | null) => { viewId: string; name: string }
+  onAddBlock: (viewId: string, node: Element, frame: DOMRect) => string | null
+  onAutoDetectView: (viewId: string, elements: Element[], frame: DOMRect) => number
+  onFlowLine: (from: string, to: string, label: string) => void
+  onSelectComponent: (componentId: string) => void
+}
 
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-  const observerRef = useRef<MutationObserver | null>(null)
-  const busyRef = useRef(false)
-  const currentFpRef = useRef<string | null>(null)
-  const currentNameRef = useRef<string | null>(null)
-  const pendingLabelRef = useRef<string | null>(null)
+// The only place a mockup ever actually runs — every saved view comes from
+// here, either auto-captured while recording or boxed/saved on demand.
+// Static views elsewhere are frozen screenshots of what got committed here.
+export const InteractiveWorkspace = forwardRef<InteractiveWorkspaceHandle, InteractiveWorkspaceProps>(
+  function InteractiveWorkspace(
+    { filters, views, components, selectedComponentId, onCommitView, onAddBlock, onAutoDetectView, onFlowLine, onSelectComponent },
+    ref,
+  ) {
+    const rootHtml = useLiveSessionStore((s) => s.rootHtml)
+    const setRootHtml = useLiveSessionStore((s) => s.setRootHtml)
+    const recording = useLiveSessionStore((s) => s.recording)
+    const setRecording = useLiveSessionStore((s) => s.setRecording)
+    const inspectMode = useLiveSessionStore((s) => s.inspectMode)
+    const showBoxes = useLiveSessionStore((s) => s.showBoxes)
 
-  const recordingRef = useRef(recording)
-  const filtersRef = useRef(filters)
-  useEffect(() => {
-    recordingRef.current = recording
-  }, [recording])
-  useEffect(() => {
-    filtersRef.current = filters
-  }, [filters])
+    const toast = useToastStore((s) => s.show)
+    const [pasting, setPasting] = useState(false)
+    const [pasteText, setPasteText] = useState('')
+    const [frameHeight, setFrameHeight] = useState(MIN_FRAME_HEIGHT)
+    const [hover, setHover] = useState<HoverState | null>(null)
+    const [currentViewId, setCurrentViewId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!status) return
-    const timer = setTimeout(() => setStatus(null), 4000)
-    return () => clearTimeout(timer)
-  }, [status])
+    const iframeRef = useRef<HTMLIFrameElement>(null)
+    const observerRef = useRef<MutationObserver | null>(null)
+    const currentViewIdRef = useRef<string | null>(null)
+    const currentFpRef = useRef<string | null>(null)
+    const currentNameRef = useRef<string | null>(null)
+    const pendingLabelRef = useRef<string | null>(null)
 
-  const commitCurrentScreen = useCallback(
-    async (isManualSave: boolean) => {
+    const recordingRef = useRef(recording)
+    const filtersRef = useRef(filters)
+    const inspectModeRef = useRef(inspectMode)
+    useEffect(() => {
+      recordingRef.current = recording
+    }, [recording])
+    useEffect(() => {
+      filtersRef.current = filters
+    }, [filters])
+    useEffect(() => {
+      inspectModeRef.current = inspectMode
+    }, [inspectMode])
+
+    const setCurrentView = (viewId: string | null) => {
+      currentViewIdRef.current = viewId
+      setCurrentViewId(viewId)
+    }
+
+    // Commits the currently-displayed screen as a view exactly once — repeat
+    // calls (another box added, auto-detect run again) reuse the same view id
+    // instead of creating duplicates, until navigation resets the tracking.
+    const ensureCommitted = useCallback(async (): Promise<string | null> => {
+      if (currentViewIdRef.current) return currentViewIdRef.current
       const iframe = iframeRef.current
       const idoc = iframe?.contentDocument
-      if (!iframe || !idoc || busyRef.current) return
-      busyRef.current = true
-      try {
-        const h = resizeIframeToContent(iframe, idoc)
-        setFrameHeight(h)
-        const frame = iframe.getBoundingClientRect()
-        const html = idoc.documentElement.outerHTML
-        const screenshotBlob = await captureScreenshot(idoc, frame.width, frame.height)
+      if (!iframe || !idoc) return null
+
+      const frame = iframe.getBoundingClientRect()
+      const html = idoc.documentElement.outerHTML
+      const screenshotBlob = await captureScreenshot(idoc, frame.width, frame.height)
+      const { viewId, name } = onCommitView(html, screenshotBlob)
+
+      setCurrentView(viewId)
+      currentFpRef.current = fingerprintOf(idoc)
+      currentNameRef.current = name
+      toast(recordingRef.current ? `Recording — saved "${name}"` : `Saved "${name}"`)
+      return viewId
+    }, [onCommitView, toast])
+
+    const handleSettle = useRef<() => void>(() => {})
+    useEffect(() => {
+      handleSettle.current = debounce(() => {
+        const idoc = iframeRef.current?.contentDocument
+        if (!idoc || !recordingRef.current) return
+        const fp = fingerprintOf(idoc)
+        if (fp === currentFpRef.current) return
 
         const outgoingName = currentNameRef.current
         const outgoingLabel = pendingLabelRef.current
-
-        const { viewId, name } = onCommitView(html, screenshotBlob)
-        onAutoDetectView(viewId, collectDetectableElements(idoc, filtersRef.current), frame)
-
-        if (!isManualSave && outgoingName) {
-          onFlowLine(outgoingName, name, outgoingLabel || 'Click')
-        }
-
-        currentFpRef.current = fingerprintOf(idoc)
-        currentNameRef.current = name
+        setCurrentView(null)
+        currentFpRef.current = null
+        currentNameRef.current = null
         pendingLabelRef.current = null
-        setStatus(isManualSave ? `Saved "${name}"` : `Recording — saved "${name}"`)
-      } finally {
-        busyRef.current = false
-      }
-    },
-    [onCommitView, onAutoDetectView, onFlowLine],
-  )
 
-  const handleSettle = useRef<() => void>(() => {})
-  useEffect(() => {
-    handleSettle.current = debounce(() => {
-      const idoc = iframeRef.current?.contentDocument
-      if (!idoc || !recordingRef.current) return
-      const fp = fingerprintOf(idoc)
-      if (fp === currentFpRef.current) return
-      void commitCurrentScreen(false)
-    }, SETTLE_DEBOUNCE_MS)
-  }, [commitCurrentScreen])
+        void ensureCommitted().then((viewId) => {
+          if (!viewId) return
+          if (outgoingName) onFlowLine(outgoingName, currentNameRef.current ?? '', outgoingLabel || 'Click')
+          const iframe = iframeRef.current
+          const freshDoc = iframe?.contentDocument
+          if (iframe && freshDoc) {
+            const frame = iframe.getBoundingClientRect()
+            onAutoDetectView(viewId, collectDetectableElements(freshDoc, filtersRef.current), frame)
+          }
+        })
+      }, SETTLE_DEBOUNCE_MS)
+    }, [ensureCommitted, onFlowLine, onAutoDetectView])
 
-  const handleFrameLoad = useCallback(() => {
-    const iframe = iframeRef.current
-    const idoc = iframe?.contentDocument
-    if (!iframe || !idoc) return
+    const handleFrameLoad = useCallback(() => {
+      const iframe = iframeRef.current
+      const idoc = iframe?.contentDocument
+      if (!iframe || !idoc) return
 
-    setFrameHeight(resizeIframeToContent(iframe, idoc))
-    currentFpRef.current = null
-    currentNameRef.current = null
-    pendingLabelRef.current = null
+      setFrameHeight(resizeIframeToContent(iframe, idoc))
+      setCurrentView(null)
+      currentFpRef.current = null
+      currentNameRef.current = null
+      pendingLabelRef.current = null
 
-    idoc.addEventListener(
-      'click',
-      (e) => {
-        if (!recordingRef.current) return
-        pendingLabelRef.current = traceLabelFor(e.target as Element)
-      },
-      true,
-    )
+      idoc.addEventListener('mousemove', (e) => {
+        if (!inspectModeRef.current) return
+        const target = findInteresting(e.target as Element, idoc, filtersRef.current)
+        setHover(target ? { rect: target.getBoundingClientRect(), label: autoLabel(target) } : null)
+      })
+      idoc.addEventListener('mouseleave', () => setHover(null))
 
-    observerRef.current?.disconnect()
-    const observer = new MutationObserver(() => handleSettle.current())
-    observer.observe(idoc.body, { childList: true, subtree: true, attributes: true, characterData: true })
-    observerRef.current = observer
+      idoc.addEventListener(
+        'click',
+        (e) => {
+          if (!inspectModeRef.current) return
+          e.preventDefault()
+          e.stopPropagation()
+          const target = findInteresting(e.target as Element, idoc, filtersRef.current)
+          if (!target) return
+          void ensureCommitted().then((viewId) => {
+            if (!viewId) return
+            const frame = iframeRef.current?.getBoundingClientRect()
+            if (!frame) return
+            const componentId = onAddBlock(viewId, target, frame)
+            if (componentId) onSelectComponent(componentId)
+          })
+        },
+        true,
+      )
 
-    // Capture the starting screen immediately so recording has a baseline.
-    if (recordingRef.current) void commitCurrentScreen(false)
-  }, [commitCurrentScreen])
+      idoc.addEventListener(
+        'click',
+        (e) => {
+          if (inspectModeRef.current || !recordingRef.current) return
+          pendingLabelRef.current = traceLabelFor(e.target as Element)
+        },
+        true,
+      )
 
-  useEffect(() => () => observerRef.current?.disconnect(), [])
+      observerRef.current?.disconnect()
+      const observer = new MutationObserver(() => handleSettle.current())
+      observer.observe(idoc.body, { childList: true, subtree: true, attributes: true, characterData: true })
+      observerRef.current = observer
 
-  const handleToggleRecording = () => {
-    const next = !recording
-    setRecording(next)
-    if (next && iframeRef.current?.contentDocument && !currentNameRef.current) {
-      void commitCurrentScreen(false)
+      if (recordingRef.current) void ensureCommitted()
+    }, [ensureCommitted, onAddBlock, onSelectComponent])
+
+    useEffect(() => () => observerRef.current?.disconnect(), [])
+
+    // Recording is toggled from the global toolbar now, not a button owned by
+    // this component — react to the transition instead, so turning it on
+    // still captures a baseline screen wherever the toggle happened.
+    const prevRecordingRef = useRef(recording)
+    useEffect(() => {
+      const justEnabled = recording && !prevRecordingRef.current
+      prevRecordingRef.current = recording
+      if (!justEnabled || currentViewIdRef.current || !iframeRef.current?.contentDocument) return
+      void ensureCommitted().then((viewId) => {
+        if (!viewId) return
+        const iframe = iframeRef.current
+        const idoc = iframe?.contentDocument
+        if (iframe && idoc) {
+          const frame = iframe.getBoundingClientRect()
+          onAutoDetectView(viewId, collectDetectableElements(idoc, filtersRef.current), frame)
+        }
+      })
+    }, [recording, ensureCommitted, onAutoDetectView])
+
+    const handleAutoDetect = useCallback(() => {
+      void ensureCommitted().then((viewId) => {
+        if (!viewId) return
+        const iframe = iframeRef.current
+        const idoc = iframe?.contentDocument
+        if (!iframe || !idoc) return
+        const frame = iframe.getBoundingClientRect()
+        const added = onAutoDetectView(viewId, collectDetectableElements(idoc, filtersRef.current), frame)
+        toast(added > 0 ? `Added ${added} detected block${added === 1 ? '' : 's'}` : 'Nothing new found — try Inspect mode for anything unusual')
+      })
+    }, [ensureCommitted, onAutoDetectView, toast])
+
+    const handleSaveView = useCallback(() => {
+      void ensureCommitted().then((viewId) => {
+        if (!viewId) {
+          toast('Load a mockup first')
+          return
+        }
+        toast(`Saved "${currentNameRef.current}"`)
+      })
+    }, [ensureCommitted, toast])
+
+    useImperativeHandle(ref, () => ({ autoDetect: handleAutoDetect, saveView: handleSaveView }), [
+      handleAutoDetect,
+      handleSaveView,
+    ])
+
+    const handleLoadRoot = () => {
+      if (!pasteText.trim()) return
+      setRootHtml(pasteText)
+      setPasting(false)
+      setPasteText('')
     }
-  }
 
-  const handleLoadRoot = () => {
-    if (!pasteText.trim()) return
-    setRootHtml(pasteText)
-    setPasting(false)
-    setPasteText('')
-  }
+    const currentView = views.find((v) => v.id === currentViewId) ?? null
 
-  if (!rootHtml) {
+    if (!rootHtml) {
+      return (
+        <main className="flex flex-1 flex-col items-center justify-center gap-3 overflow-auto bg-background p-6">
+          {pasting ? (
+            <div className="flex w-[600px] max-w-full flex-col gap-2">
+              <textarea
+                autoFocus
+                className="h-56 w-full resize-y rounded-md border border-input bg-secondary p-2.5 font-mono text-xs text-foreground"
+                placeholder="Paste the full HTML of the mockup — a single screen or a full SPA flow both work."
+                spellCheck={false}
+                value={pasteText}
+                onChange={(e) => setPasteText(e.target.value)}
+              />
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setPasting(false)}>
+                  Cancel
+                </Button>
+                <Button size="sm" disabled={!pasteText.trim()} onClick={handleLoadRoot}>
+                  Go live
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Paste your single-file mockup — a single screen or a full SPA flow both work. It loads live so you can
+                click through it; start recording or hit &ldquo;Save view&rdquo; whenever you want to freeze the
+                current screen.
+              </p>
+              <Button size="sm" onClick={() => setPasting(true)}>
+                + Load mockup
+              </Button>
+            </>
+          )}
+        </main>
+      )
+    }
+
     return (
-      <main className="flex flex-1 flex-col items-center justify-center gap-3 overflow-auto bg-background p-6">
-        {pasting ? (
-          <div className="flex w-[600px] max-w-full flex-col gap-2">
-            <textarea
-              autoFocus
-              className="h-56 w-full resize-y rounded-md border border-input bg-secondary p-2.5 font-mono text-xs text-foreground"
-              placeholder="Paste the full HTML of a multi-screen mockup — click through it live here."
-              spellCheck={false}
-              value={pasteText}
-              onChange={(e) => setPasteText(e.target.value)}
+      <main className="flex flex-1 flex-col overflow-auto bg-[image:linear-gradient(hsl(var(--border))_1px,transparent_1px),linear-gradient(90deg,hsl(var(--border))_1px,transparent_1px)] bg-[size:24px_24px] bg-background">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border bg-background/95 px-3 py-1.5">
+          <Button variant="ghost" size="sm" onClick={() => { setRecording(false); setRootHtml(null) }}>
+            Change mockup
+          </Button>
+        </div>
+        <div className="pointer-events-none sticky top-0 z-10 flex justify-center gap-2 pt-2">
+          {inspectMode && (
+            <span className="pointer-events-auto rounded-b-lg bg-live px-3 py-1 text-[11.5px] font-semibold text-[#1a0e04] shadow-lg">
+              Inspect on — hover to highlight, click to box
+            </span>
+          )}
+          {recording && (
+            <span className="pointer-events-auto rounded-b-lg bg-rec px-3 py-1 text-[11.5px] font-semibold text-[#1a0505] shadow-lg">
+              ⏺ Recording
+            </span>
+          )}
+        </div>
+        <div className="flex justify-center p-8">
+          <div
+            className="relative shrink-0 overflow-hidden rounded bg-black shadow-[0_0_0_1px_hsl(var(--border)),0_24px_60px_rgba(0,0,0,0.5)]"
+            style={{ width: FRAME_WIDTH, height: frameHeight }}
+          >
+            <iframe
+              ref={iframeRef}
+              title="Live mockup"
+              srcDoc={rootHtml}
+              sandbox="allow-same-origin allow-scripts"
+              onLoad={handleFrameLoad}
+              className="block w-full border-0 bg-white"
             />
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setPasting(false)}>
-                Cancel
-              </Button>
-              <Button size="sm" disabled={!pasteText.trim()} onClick={handleLoadRoot}>
-                Go live
-              </Button>
+            <div className="pointer-events-none absolute inset-0">
+              {showBoxes &&
+                currentView?.blocks.map((block) => {
+                  const component = components.find((c) => c.id === block.componentId)
+                  const style = CATEGORY_STYLES[component?.category ?? 'unmatched']
+                  return (
+                    <div
+                      key={block.id}
+                      onClick={() => onSelectComponent(block.componentId)}
+                      className={cn(
+                        'pointer-events-auto absolute cursor-pointer rounded-sm border-2',
+                        style.border,
+                        style.bg,
+                        block.componentId === selectedComponentId && 'ring-2 ring-white',
+                      )}
+                      style={{
+                        left: `${block.rectPct.left}%`,
+                        top: `${block.rectPct.top}%`,
+                        width: `${block.rectPct.width}%`,
+                        height: `${block.rectPct.height}%`,
+                      }}
+                    >
+                      <span
+                        className={cn(
+                          'pointer-events-none absolute -top-[19px] left-[-2px] whitespace-nowrap rounded-t px-1.5 py-0.5 font-mono text-[10px] font-semibold',
+                          style.tag,
+                        )}
+                      >
+                        {component?.label ?? block.tag}
+                      </span>
+                    </div>
+                  )
+                })}
+              {hover && (
+                <div
+                  className="pointer-events-none absolute rounded-sm border-2 border-dashed border-white bg-white/10"
+                  style={{
+                    left: hover.rect.left,
+                    top: hover.rect.top,
+                    width: hover.rect.width,
+                    height: hover.rect.height,
+                  }}
+                >
+                  <span className="absolute -top-5 left-0 whitespace-nowrap rounded bg-white px-1.5 py-0.5 font-mono text-[10px] text-black">
+                    {hover.label}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
-        ) : (
-          <>
-            <p className="text-sm text-muted-foreground">
-              Paste an interactive mockup to click through it live and record screens automatically.
-            </p>
-            <Button size="sm" onClick={() => setPasting(true)}>
-              + Load live mockup
-            </Button>
-          </>
-        )}
+        </div>
       </main>
     )
-  }
-
-  return (
-    <main className="flex flex-1 flex-col overflow-auto bg-background">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-        <Button variant={recording ? 'default' : 'outline'} size="sm" onClick={handleToggleRecording}>
-          {recording ? '⏺ Recording' : '⏺ Start recording'}
-        </Button>
-        <Button variant="outline" size="sm" onClick={() => void commitCurrentScreen(true)}>
-          💾 Save view
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            setRecording(false)
-            setRootHtml(null)
-          }}
-        >
-          Change mockup
-        </Button>
-        {status && <span className="text-xs text-muted-foreground">{status}</span>}
-      </div>
-      <div className="flex justify-center p-6">
-        <div className="relative shrink-0" style={{ width: FRAME_WIDTH, height: frameHeight }}>
-          <iframe
-            ref={iframeRef}
-            title="Live mockup"
-            srcDoc={rootHtml}
-            sandbox="allow-same-origin allow-scripts"
-            onLoad={handleFrameLoad}
-            className="block w-full border-0 bg-white"
-          />
-        </div>
-      </div>
-    </main>
-  )
-}
+  },
+)

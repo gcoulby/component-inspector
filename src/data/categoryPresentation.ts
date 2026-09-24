@@ -17,14 +17,30 @@ interface CategoryStyle {
   dot: string
   border: string
   bg: string
+  tag: string
 }
 
-// Matches the PoC's palette exactly: new=pink, undocumented=blue,
-// matched=green, unmatched=amber/gold (the default until something is
-// matched or manually reviewed — never blue, or everything looks the same).
+// The PoC's exact --new/--undoc/--matched/--unmatched tokens (see
+// tailwind.config.ts), not the nearest Tailwind-named color — unmatched is
+// the default until something is matched or manually reviewed.
 export const CATEGORY_STYLES: Record<ComponentCategory, CategoryStyle> = {
-  new: { dot: 'bg-pink-400', border: 'border-pink-400', bg: 'bg-pink-400/25' },
-  undocumented: { dot: 'bg-sky-400', border: 'border-sky-400', bg: 'bg-sky-400/25' },
-  matched: { dot: 'bg-emerald-400', border: 'border-emerald-400', bg: 'bg-emerald-400/25' },
-  unmatched: { dot: 'bg-amber-500', border: 'border-amber-500', bg: 'bg-amber-500/25' },
+  new: { dot: 'bg-cat-new', border: 'border-cat-new', bg: 'bg-cat-new/15', tag: 'bg-cat-new text-[#1a0a12]' },
+  undocumented: {
+    dot: 'bg-cat-undocumented',
+    border: 'border-cat-undocumented',
+    bg: 'bg-cat-undocumented/15',
+    tag: 'bg-cat-undocumented text-[#04121f]',
+  },
+  matched: {
+    dot: 'bg-cat-matched',
+    border: 'border-cat-matched',
+    bg: 'bg-cat-matched/15',
+    tag: 'bg-cat-matched text-[#04140c]',
+  },
+  unmatched: {
+    dot: 'bg-cat-unmatched',
+    border: 'border-cat-unmatched',
+    bg: 'bg-cat-unmatched/16',
+    tag: 'bg-cat-unmatched text-[#1a1404]',
+  },
 }

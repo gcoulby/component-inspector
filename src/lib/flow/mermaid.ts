@@ -4,8 +4,12 @@ export function mermaidNodeId(name: string): string {
   return 'n_' + name.replace(/[^a-zA-Z0-9]/g, '_')
 }
 
-// Shared between the live preview (object URLs) and the markdown export
-// (relative assets/<uuid>.png paths) — only how an image resolves differs.
+// Used by both the live preview and the markdown export — they just pass
+// different resolvers. The live canvas resolves to a data URI (ephemeral,
+// fine to embed); the export resolves to a relative assets/<uuid>.png path
+// (persisted, must stay small). Either way this needs mermaid.initialize's
+// maxTextSize raised well past the ~50k-char default, or a handful of
+// screenshots' worth of data URIs blows the limit outright.
 export function buildMermaidDefinition(
   edges: FlowEdge[],
   views: View[],

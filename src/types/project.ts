@@ -25,6 +25,7 @@ export interface Block {
 export interface View {
   id: string
   name: string
+  details: string
   htmlAssetId: string
   screenshotAssetId: string | null
   blocks: Block[]
@@ -52,13 +53,13 @@ export interface Project {
 
 export const CURRENT_FORMAT_VERSION = 1
 
-export function createEmptyProject(name: string): Project {
+export function createEmptyProject(name: string, defaultManifest: ManifestEntry[] = []): Project {
   return {
     formatVersion: CURRENT_FORMAT_VERSION,
     name,
     views: [],
     components: [],
-    manifest: [],
+    manifest: defaultManifest,
     flowText: '',
   }
 }

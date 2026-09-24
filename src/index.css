@@ -2,28 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Every value below is the PoC's actual palette (.temp/component-inspector.html
+   :root), converted to HSL for shadcn's var(--x) convention — not an
+   approximation from Tailwind's stock palette. */
 @layer base {
   :root {
-    --background: 240 6% 10%;
-    --foreground: 0 0% 95%;
-    --card: 240 5% 13%;
-    --card-foreground: 0 0% 95%;
-    --popover: 240 5% 13%;
-    --popover-foreground: 0 0% 95%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 18%;
-    --secondary-foreground: 0 0% 95%;
-    --muted: 240 5% 18%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 240 5% 20%;
-    --accent-foreground: 0 0% 95%;
-    --destructive: 0 63% 50%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 5% 20%;
-    --input: 240 5% 20%;
-    --ring: 217 91% 60%;
+    --background: 216 17% 6%;
+    --foreground: 48 10% 90%;
+    --card: 214 16% 9%;
+    --card-foreground: 48 10% 90%;
+    --popover: 214 16% 9%;
+    --popover-foreground: 48 10% 90%;
+    --primary: 153 60% 53%;
+    --primary-foreground: 200 100% 4%;
+    --secondary: 213 15% 12%;
+    --secondary-foreground: 48 10% 90%;
+    --muted: 213 15% 12%;
+    --muted-foreground: 220 6% 63%;
+    --muted-faint: 217 7% 38%;
+    --accent: 213 15% 15%;
+    --accent-foreground: 48 10% 90%;
+    --destructive: 0 100% 68%;
+    --destructive-foreground: 0 60% 8%;
+    --border: 0 0% 100% / 0.08;
+    --border-strong: 0 0% 100% / 0.14;
+    --input: 213 15% 15%;
+    --ring: 153 60% 53%;
     --radius: 0.5rem;
+
+    --cat-new: 333 77% 68%;
+    --cat-undocumented: 208 83% 65%;
+    --cat-matched: 153 60% 53%;
+    --cat-unmatched: 46 68% 47%;
+    --live: 24 100% 62%;
+    --rec: 0 100% 68%;
   }
 }
 
@@ -32,6 +44,7 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+    font-size: 13.5px;
   }
 }
