@@ -1,5 +1,5 @@
 import { DetectionFilters } from '@/components/canvas/DetectionFilters'
-import { ManifestEditor } from '@/components/canvas/ManifestEditor'
+import { ManifestLink } from '@/components/canvas/ManifestLink'
 import { ViewFields } from '@/components/canvas/ViewFields'
 import { ComponentList } from '@/components/canvas/ComponentList'
 import { ComponentDetail } from '@/components/canvas/ComponentDetail'
@@ -14,7 +14,7 @@ interface InspectorSidebarProps {
   views: View[]
   components: ProjectComponent[]
   manifest: ManifestEntry[]
-  onManifestChange: (manifest: ManifestEntry[]) => void
+  onOpenManifest: () => void
   selectedComponentId: string | null
   onSelectComponent: (componentId: string) => void
   usedElsewhere: boolean
@@ -42,7 +42,7 @@ export function InspectorSidebar({
   views,
   components,
   manifest,
-  onManifestChange,
+  onOpenManifest,
   selectedComponentId,
   onSelectComponent,
   usedElsewhere,
@@ -61,7 +61,7 @@ export function InspectorSidebar({
 
   return (
     <aside className="flex w-72 shrink-0 flex-col overflow-y-auto border-l border-border bg-card">
-      <ManifestEditor manifest={manifest} onChange={onManifestChange} />
+      <ManifestLink count={manifest.length} onOpen={onOpenManifest} />
       {!isInteractiveActive && view && (
         <ViewFields
           view={view}

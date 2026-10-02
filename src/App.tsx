@@ -5,6 +5,7 @@ import { Toast } from '@/components/layout/Toast'
 import type { Mode } from '@/components/layout/ModeTabs'
 import { CanvasPage } from '@/components/canvas/CanvasPage'
 import { FlowPage } from '@/components/flow/FlowPage'
+import { ManifestPage } from '@/components/manifest/ManifestPage'
 import { LIVE_VIEW_ID } from '@/lib/liveSession'
 import type { InteractiveWorkspaceHandle } from '@/components/canvas/InteractiveWorkspace'
 
@@ -39,8 +40,14 @@ export function App() {
           modalOpen={modalOpen}
           onModalOpenChange={setModalOpen}
           workspaceRef={workspaceRef}
+          onOpenManifest={() => setMode('manifest')}
         />
       </div>
+      {mode === 'manifest' && (
+        <div className="flex flex-1 overflow-hidden">
+          <ManifestPage />
+        </div>
+      )}
       {mode === 'flow' && (
         <div className="flex flex-1 overflow-hidden">
           <FlowPage />

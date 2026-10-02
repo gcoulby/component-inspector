@@ -18,6 +18,7 @@ interface CanvasPageProps {
   modalOpen: boolean
   onModalOpenChange: (open: boolean) => void
   workspaceRef: RefObject<InteractiveWorkspaceHandle>
+  onOpenManifest: () => void
 }
 
 export function CanvasPage({
@@ -26,8 +27,9 @@ export function CanvasPage({
   modalOpen,
   onModalOpenChange,
   workspaceRef,
+  onOpenManifest,
 }: CanvasPageProps) {
-  const { project, assets, deleteView, renameView, setViewDetails, mergeViews, commitView, addFlowLine, updateProject } =
+  const { project, assets, deleteView, renameView, setViewDetails, mergeViews, commitView, addFlowLine, refreshBoxedScreenshots } =
     useProject()
   const {
     addOrSelectBlockAt,
@@ -156,6 +158,10 @@ export function CanvasPage({
           selectedComponentId={selectedComponentId}
           onSelectComponent={setSelectedComponentId}
           onRectChange={(blockId, rectPct: RectPct) => setBlockRectAt(activeView.id, blockId, rectPct)}
+          onUpdateBoxed={async () => {
+            await refreshBoxedScreenshots(activeView.id)
+            toast('Boxed screenshot updated')
+          }}
           onDrawBlock={(rectPct: RectPct) => {
             const componentId = addManualBlockAt(activeView.id, rectPct)
             if (componentId) setSelectedComponentId(componentId)
@@ -170,7 +176,7 @@ export function CanvasPage({
         views={views}
         components={components}
         manifest={manifest}
-        onManifestChange={(newManifest) => updateProject((p) => ({ ...p, manifest: newManifest }))}
+        onOpenManifest={onOpenManifest}
         selectedComponentId={selectedComponentId}
         onSelectComponent={setSelectedComponentId}
         usedElsewhere={usedElsewhere}

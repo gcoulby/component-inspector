@@ -33,13 +33,21 @@ export interface View {
   name: string
   details: string
   htmlAssetId: string
+  // The raw capture — never has boxes drawn on it.
   screenshotAssetId: string | null
+  // The same capture with every block drawn over it in its component color;
+  // regenerated on demand and whenever the project is saved or exported.
+  boxedScreenshotAssetId: string | null
   blocks: Block[]
 }
 
 export interface ManifestEntry {
   name: string
   keywords: string[]
+  description: string
+  url: string
+  // Reference screenshot of the library component (e.g. its Storybook page).
+  screenshotAssetId: string | null
 }
 
 export interface FlowEdge {

@@ -11,6 +11,7 @@ interface ProjectState {
   loadProject: (project: Project, assets: Map<string, Blob>, options: { handle: FileSystemFileHandle | null; createdAt: string }) => void
   updateProject: (updater: (project: Project) => Project) => void
   setAsset: (path: string, blob: Blob) => void
+  setAssets: (entries: [string, Blob][]) => void
   markSaved: (handle: FileSystemFileHandle | null) => void
   closeProject: () => void
 }
@@ -35,6 +36,13 @@ export const useProjectStore = create<ProjectState>((set) => ({
     set((state) => {
       const assets = new Map(state.assets)
       assets.set(path, blob)
+      return { assets, isDirty: true }
+    }),
+
+  setAssets: (entries) =>
+    set((state) => {
+      const assets = new Map(state.assets)
+      for (const [path, blob] of entries) assets.set(path, blob)
       return { assets, isDirty: true }
     }),
 

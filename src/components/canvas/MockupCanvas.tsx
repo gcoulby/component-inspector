@@ -16,6 +16,7 @@ interface MockupCanvasProps {
   onSelectComponent: (componentId: string) => void
   onRectChange: (blockId: string, rectPct: RectPct) => void
   onDrawBlock: (rectPct: RectPct) => void
+  onUpdateBoxed: () => void
 }
 
 // A saved view is a frozen screenshot, not a live re-render — matching the
@@ -30,6 +31,7 @@ export function MockupCanvas({
   onSelectComponent,
   onRectChange,
   onDrawBlock,
+  onUpdateBoxed,
 }: MockupCanvasProps) {
   const showBoxes = useLiveSessionStore((s) => s.showBoxes)
   const drawBoxMode = useLiveSessionStore((s) => s.drawBoxMode)
@@ -87,6 +89,9 @@ export function MockupCanvas({
           onClick={() => setDrawBoxMode(!drawBoxMode)}
         >
           {drawBoxMode ? '✛ Drawing — click and drag on the image' : '✛ Draw box'}
+        </Button>
+        <Button variant="accentOutline" size="sm" onClick={onUpdateBoxed} disabled={!screenshotUrl}>
+          🖼️ Update boxed screenshot
         </Button>
       </div>
       <div className="flex justify-center p-8">

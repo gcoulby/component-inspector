@@ -1,6 +1,7 @@
 import JSZip from 'jszip'
 import { CURRENT_FORMAT_VERSION, type Project } from '@/types/project'
 import type { ArchiveManifest } from '@/types/archive'
+import { normalizeProject } from '@/lib/fdr/normalize'
 
 export class FdrFormatError extends Error {}
 
@@ -46,7 +47,7 @@ export async function parseFdrArchive(source: Blob): Promise<FdrArchive> {
     )
   }
 
-  const project = JSON.parse(await projectFile.async('string')) as Project
+  const project = normalizeProject(JSON.parse(await projectFile.async('string')) as Project)
 
   const assets = new Map<string, Blob>()
   const assetFiles = zip.folder('assets')

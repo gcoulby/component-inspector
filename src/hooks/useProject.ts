@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useProjectStore } from '@/store/projectStore'
-import { createEmptyProject, type View } from '@/types/project'
+import { createEmptyProject, type Project, type View } from '@/types/project'
 import { DEFAULT_MANIFEST } from '@/data/defaultManifest'
 import { buildFdrArchive, parseFdrArchive } from '@/lib/fdr/serialize'
+import { normalizeProject } from '@/lib/fdr/normalize'
+import { renderBoxedScreenshot } from '@/lib/boxedImage'
 import { openFdrFile, saveFdrBlob } from '@/lib/fdr/fileSystemAccess'
 import { deriveViewName } from '@/lib/detection/viewNaming'
 import { appendFlowLine, renameNodeInFlow } from '@/lib/flow/flowText'
@@ -14,6 +16,21 @@ import {
 } from '@/lib/fdr/autosave'
 
 const AUTOSAVE_INTERVAL_MS = 20_000
+
+// What each view's boxed screenshot was last rendered from, so saving or
+// exporting an unchanged project doesn't regenerate every image (and mark it
+// dirty again) for nothing.
+const boxedSignatures = new Map<string, string>()
+
+function boxedSignatureOf(project: Project, view: View): string {
+  return JSON.stringify([
+    view.screenshotAssetId,
+    view.blocks.map((b) => {
+      const c = project.components.find((comp) => comp.id === b.componentId)
+      return [b.rectPct, c?.color, c?.label, c?.category]
+    }),
+  ])
+}
 
 // Only one mounted consumer should drive the autosave interval and the
 // startup recovery check, no matter how many components call this hook.
@@ -28,6 +45,7 @@ export function useProject() {
   const loadProject = useProjectStore((s) => s.loadProject)
   const updateProject = useProjectStore((s) => s.updateProject)
   const setAsset = useProjectStore((s) => s.setAsset)
+  const setAssets = useProjectStore((s) => s.setAssets)
   const markSaved = useProjectStore((s) => s.markSaved)
 
   const [recoverableSnapshot, setRecoverableSnapshot] = useState<AutosaveSnapshot | null>(null)
@@ -74,9 +92,55 @@ export function useProject() {
     setRecoverableSnapshot(null)
   }, [loadProject])
 
+  // Re-renders the boxed screenshot for one view (or every view) from the
+  // current blocks and stores it as an asset. Unchanged views are skipped.
+  const refreshBoxedScreenshots = useCallback(
+    async (onlyViewId?: string): Promise<number> => {
+      const { project: current, assets: currentAssets } = useProjectStore.getState()
+      if (!current) return 0
+      const rendered: { viewId: string; assetId: string; blob: Blob; signature: string }[] = []
+      for (const view of current.views) {
+        if (onlyViewId && view.id !== onlyViewId) continue
+        if (!view.screenshotAssetId) continue
+        const raw = currentAssets.get(`assets/${view.screenshotAssetId}.png`)
+        if (!raw) continue
+        const signature = boxedSignatureOf(current, view)
+        const hasStored =
+          view.boxedScreenshotAssetId !== null && currentAssets.has(`assets/${view.boxedScreenshotAssetId}.png`)
+        if (hasStored && boxedSignatures.get(view.id) === signature) continue
+        const boxes = view.blocks.flatMap((block) => {
+          const component = current.components.find((c) => c.id === block.componentId)
+          return component ? [{ block, component }] : []
+        })
+        const blob = await renderBoxedScreenshot(raw, boxes)
+        rendered.push({ viewId: view.id, assetId: view.boxedScreenshotAssetId ?? crypto.randomUUID(), blob, signature })
+      }
+      if (rendered.length === 0) return 0
+      setAssets(rendered.map((r) => [`assets/${r.assetId}.png`, r.blob]))
+      updateProject((p) => ({
+        ...p,
+        views: p.views.map((v) => {
+          const hit = rendered.find((r) => r.viewId === v.id)
+          return hit ? { ...v, boxedScreenshotAssetId: hit.assetId } : v
+        }),
+      }))
+      rendered.forEach((r) => boxedSignatures.set(r.viewId, r.signature))
+      return rendered.length
+    },
+    [setAssets, updateProject],
+  )
+
+  const prepareForExport = useCallback(async () => {
+    await refreshBoxedScreenshots()
+    const state = useProjectStore.getState()
+    return { project: state.project, assets: state.assets }
+  }, [refreshBoxedScreenshots])
+
   const saveProject = useCallback(async () => {
     if (!project) return
-    const blob = await buildFdrArchive(project, assets, createdAt)
+    await refreshBoxedScreenshots()
+    const fresh = useProjectStore.getState()
+    const blob = await buildFdrArchive(fresh.project ?? project, fresh.assets, createdAt)
     const handle = await saveFdrBlob(blob, `${project.name}.fdr`, fileHandle)
     if (fileHandle || handle) {
       markSaved(handle ?? fileHandle)
@@ -86,7 +150,7 @@ export function useProject() {
       markSaved(null)
     }
     void clearAutosaveSnapshot()
-  }, [project, assets, createdAt, fileHandle, markSaved])
+  }, [project, createdAt, fileHandle, markSaved, refreshBoxedScreenshots])
 
   const deleteView = useCallback(
     (viewId: string) => {
@@ -156,7 +220,15 @@ export function useProject() {
           p.views.map((v) => v.name),
           p.views.length + 1,
         )
-        const view: View = { id: crypto.randomUUID(), name, details: '', htmlAssetId, screenshotAssetId, blocks: [] }
+        const view: View = {
+          id: crypto.randomUUID(),
+          name,
+          details: '',
+          htmlAssetId,
+          screenshotAssetId,
+          boxedScreenshotAssetId: null,
+          blocks: [],
+        }
         result = { viewId: view.id, name }
         return { ...p, views: [...p.views, view] }
       })
@@ -174,7 +246,7 @@ export function useProject() {
 
   const recoverSnapshot = useCallback(() => {
     if (!recoverableSnapshot) return
-    loadProject(recoverableSnapshot.project, recoverableSnapshot.assets, {
+    loadProject(normalizeProject(recoverableSnapshot.project), recoverableSnapshot.assets, {
       handle: null,
       createdAt: recoverableSnapshot.savedAt,
     })
@@ -197,6 +269,8 @@ export function useProject() {
     saveProject,
     updateProject,
     setAsset,
+    refreshBoxedScreenshots,
+    prepareForExport,
     deleteView,
     renameView,
     setViewDetails,

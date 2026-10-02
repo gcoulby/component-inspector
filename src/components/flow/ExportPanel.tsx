@@ -4,9 +4,8 @@ import { buildExportArchive } from '@/lib/flow/exportArchive'
 import type { Project } from '@/types/project'
 
 interface ExportPanelProps {
-  project: Project
-  assets: Map<string, Blob>
   markdown: string
+  onPrepareExport: () => Promise<{ project: Project | null; assets: Map<string, Blob> }>
 }
 
 function downloadBlob(blob: Blob, filename: string) {
@@ -18,7 +17,7 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
-export function ExportPanel({ project, assets, markdown }: ExportPanelProps) {
+export function ExportPanel({ markdown, onPrepareExport }: ExportPanelProps) {
   const [status, setStatus] = useState<string | null>(null)
 
   const handleCopy = async () => {
@@ -32,6 +31,8 @@ export function ExportPanel({ project, assets, markdown }: ExportPanelProps) {
 
   const handleDownload = async () => {
     setStatus('Zipping…')
+    const { project, assets } = await onPrepareExport()
+    if (!project) return
     const blob = await buildExportArchive(project, assets)
     downloadBlob(blob, `${project.name || 'component-inspector-fdr'}.zip`)
     setStatus('Download started')
@@ -48,7 +49,7 @@ export function ExportPanel({ project, assets, markdown }: ExportPanelProps) {
       </Button>
       <p className="text-[11px] leading-relaxed text-muted-faint">
         The zip has two markdown files — a full version with thumbnails on the flow graph, and a plain one without —
-        plus the assets/ folder both of them reference. Copy only grabs the full version&apos;s text.
+        plus the assets/ folder both of them reference (raw and boxed screenshots per view, a capture of every box, and each matched library component's reference image framed in its color). Copy only grabs the full version&apos;s text.
       </p>
       {status && <span className="text-xs text-muted-foreground">{status}</span>}
     </div>

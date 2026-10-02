@@ -1,6 +1,6 @@
 import { cn } from '@/lib/utils'
 
-export type Mode = 'canvas' | 'flow'
+export type Mode = 'canvas' | 'manifest' | 'flow'
 
 interface ModeTabsProps {
   mode: Mode
@@ -9,6 +9,7 @@ interface ModeTabsProps {
 
 const MODES: { id: Mode; label: string }[] = [
   { id: 'canvas', label: 'Canvas' },
+  { id: 'manifest', label: 'Manifest' },
   { id: 'flow', label: 'Flow & export' },
 ]
 
